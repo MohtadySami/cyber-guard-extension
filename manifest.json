@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "Cyber Guard Extension",
+  "version": "1.0",
+  "description": "إضافة أمان سيبراني لفحص الروابط والملفات",
+  "permissions": [
+    "storage",
+    "activeTab"
+  ],
+  "action": {
+    "default_popup": "popup.html"
+  }
+}

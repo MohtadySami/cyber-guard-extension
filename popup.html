@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cyber Guard</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <div class="logo-title">
+        <span class="shield-icon">🛡️</span>
+        <h2>Cyber Guard</h2>
+      </div>
+      <div class="status-badge active" id="statusBadge">
+        <span class="status-dot"></span>
+        <span id="statusText">حماية نشطة</span>
+       
+      </div>
+    </header>
+
+    <section class="card">
+      <label for="apiKeyInput" class="card-title">🔑 مفتاح VirusTotal API</label>
+      <div class="input-group">
+        <input type="password" id="apiKeyInput" placeholder="أدخل الـ API Key هنا...">
+        <button id="saveBtn">حفظ</button>
+      </div>
+      <p id="msgText" class="msg-text"></p>
+    </section>
+
+    <section class="card">
+      <div class="card-title">📜 سجل الفحص الأخير</div>
+      <ul class="logs-list" id="logsList">
+        <li class="log-item empty">لا توجد عمليات فحص حالية</li>
+      </ul>
+    </section>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
