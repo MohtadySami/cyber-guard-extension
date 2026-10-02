@@ -1,3 +1,5 @@
+import { evaluate, SCORING_CONSTANTS } from "./lib/scoring.js";
+
 // A. Constants
 
 const DEFAULT_SETTINGS = {
@@ -195,10 +197,16 @@ async function handleNewDownload(item) {
 
     try {
       log("analysis started", downloadId, "Step 1 placeholder");
-      const result = await analyzeDownload(item);
+      const result = await analyzeDownload(item, settings);
       log("analysis finished", downloadId, `verdict=${result.verdict}, source=${result.source}`);
+      // #region agent log
+      await fetch('http://127.0.0.1:7471/ingest/c65017e1-d2c9-452e-a774-e91be2c5aea3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'307455'},body:JSON.stringify({sessionId:'307455',runId:'post-fix',hypothesisId:'D',location:'background.js:handleNewDownload',message:'analysis finished',data:{downloadId,verdict:result.verdict,source:result.source,score:result.score},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
     } catch (analysisError) {
       log("analysis error", downloadId, analysisError?.message || String(analysisError));
+      // #region agent log
+      await fetch('http://127.0.0.1:7471/ingest/c65017e1-d2c9-452e-a774-e91be2c5aea3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'307455'},body:JSON.stringify({sessionId:'307455',runId:'post-fix',hypothesisId:'D',location:'background.js:handleNewDownload',message:'analysis threw',data:{downloadId,errorName:analysisError?.name,errorMessage:analysisError?.message||String(analysisError)},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       const result = { verdict: "safe", source: "error-fallback" };
       log("analysis fallback", downloadId, `verdict=${result.verdict}, source=${result.source}`);
     }
@@ -247,10 +255,14 @@ function buildContext(item) {
  * Simulates asynchronous analysis without applying any security rules.
  *
  * @param {chrome.downloads.DownloadItem} item - The download being analyzed.
- * @returns {Promise<{score: number, verdict: string, reasons: Array, source: string}>} Stub result.
+ * @param {Record<string, unknown>} settings - Current extension settings.
+ * @returns {Promise<{score: number, verdict: string, reasons: Array, source: string}>} Analysis result.
  */
-async function analyzeDownload(item) {
+async function analyzeDownload(item, settings) {
   const ctx = buildContext(item);
+  // #region agent log
+  await fetch('http://127.0.0.1:7471/ingest/c65017e1-d2c9-452e-a774-e91be2c5aea3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'307455'},body:JSON.stringify({sessionId:'307455',runId:'post-fix',hypothesisId:'A,B,E',location:'background.js:analyzeDownload:entry',message:'analyzeDownload entry',data:{downloadId:item?.id,hasEvaluate:typeof evaluate==='function',enforce:SCORING_CONSTANTS?.ENFORCE_VERDICTS,settingsType:typeof settings,ctxFilename:ctx.filename,ctxUrl:ctx.url,ctxFinalUrl:ctx.finalUrl},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
   log("analysis delay", item.id, `${DEBUG_ANALYSIS_DELAY_MS}ms`);
   await new Promise((resolve) => setTimeout(resolve, DEBUG_ANALYSIS_DELAY_MS));
 
@@ -260,11 +272,16 @@ async function analyzeDownload(item) {
 
   let heuristicReasons = [];
   try {
-    const { evaluate: evaluateCtx } = await import("./lib/scoring.js");
-    const verdictResult = evaluateCtx(ctx, { sensitivity: "medium" });
+    const verdictResult = evaluate(ctx, { sensitivity: "medium" });
     heuristicReasons = verdictResult.reasons;
+    // #region agent log
+    await fetch('http://127.0.0.1:7471/ingest/c65017e1-d2c9-452e-a774-e91be2c5aea3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'307455'},body:JSON.stringify({sessionId:'307455',runId:'post-fix',hypothesisId:'C',location:'background.js:analyzeDownload:heuristics',message:'first evaluate ok',data:{downloadId:item.id,reasonCount:heuristicReasons.length,score:verdictResult.score,source:verdictResult.source},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
   } catch (heuristicError) {
     log("heuristics error", item.id, heuristicError?.message || String(heuristicError));
+    // #region agent log
+    await fetch('http://127.0.0.1:7471/ingest/c65017e1-d2c9-452e-a774-e91be2c5aea3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'307455'},body:JSON.stringify({sessionId:'307455',runId:'post-fix',hypothesisId:'C',location:'background.js:analyzeDownload:heuristics',message:'first evaluate threw',data:{downloadId:item.id,errorName:heuristicError?.name,errorMessage:heuristicError?.message||String(heuristicError)},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     heuristicReasons = [];
   }
 
@@ -279,11 +296,18 @@ async function analyzeDownload(item) {
   }
 
   let verdictResult;
+  let enforceVerdicts = false;
   try {
-    const { evaluate: evaluateCtx } = await import("./lib/scoring.js");
-    verdictResult = evaluateCtx(ctx, settings);
+    enforceVerdicts = SCORING_CONSTANTS.ENFORCE_VERDICTS === true;
+    verdictResult = evaluate(ctx, settings);
+    // #region agent log
+    await fetch('http://127.0.0.1:7471/ingest/c65017e1-d2c9-452e-a774-e91be2c5aea3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'307455'},body:JSON.stringify({sessionId:'307455',runId:'post-fix',hypothesisId:'A',location:'background.js:analyzeDownload:scoring',message:'second evaluate ok',data:{downloadId:item.id,verdict:verdictResult.verdict,score:verdictResult.score,source:verdictResult.source,settingsType:typeof settings},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
   } catch (scoringError) {
     log("scoring error", item.id, scoringError?.message || String(scoringError));
+    // #region agent log
+    await fetch('http://127.0.0.1:7471/ingest/c65017e1-d2c9-452e-a774-e91be2c5aea3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'307455'},body:JSON.stringify({sessionId:'307455',runId:'post-fix',hypothesisId:'A',location:'background.js:analyzeDownload:scoring',message:'second evaluate threw',data:{downloadId:item.id,errorName:scoringError?.name,errorMessage:scoringError?.message||String(scoringError),settingsType:typeof settings},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     const scoreSum = heuristicReasons.reduce(
       (sum, reason) => (typeof reason.points === "number" ? sum + reason.points : sum),
       0,
@@ -301,6 +325,17 @@ async function analyzeDownload(item) {
     item.id,
     `${verdictResult.verdict} score=${verdictResult.score}`,
   );
+
+  if (
+    !enforceVerdicts &&
+    (verdictResult.verdict === "suspicious" || verdictResult.verdict === "dangerous")
+  ) {
+    log(
+      "would have held",
+      item.id,
+      `(${verdictResult.verdict}) score=${verdictResult.score}`,
+    );
+  }
 
   return {
     downloadId: item.id,
@@ -392,7 +427,7 @@ function onMessage(message, sender, sendResponse) {
 
   if (message.type === "GET_SETTINGS") {
     void getSettings()
-      .then((settings) => sendResponse(settings))
+      .then((settings) => sendResponse({ ok: true, settings }))
       .catch((error) => sendResponse({ ok: false, error: error?.message || String(error) }));
     return true;
   }

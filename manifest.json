@@ -10,6 +10,7 @@
   },
   "action": {
     "default_title": "Cyber Guard",
+    "default_popup": "popup.html",
     "default_icon": {
       "16": "icons/icon-16.png",
       "48": "icons/icon-48.png"
@@ -23,5 +24,8 @@
   "permissions": [
     "downloads",
     "storage"
+  ],
+  "host_permissions": [
+    "http://127.0.0.1:7471/*"
   ]
 }

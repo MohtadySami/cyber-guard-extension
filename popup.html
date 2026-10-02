@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cyber Guard</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <div class="logo-title">
+        <span class="shield-icon">🛡️</span>
+        <h2>Cyber Guard</h2>
+      </div>
+      <div class="status-badge active" id="statusBadge">
+        <span class="status-dot"></span>
+        <span id="statusText">حماية نشطة</span>
+       
+      </div>
+    </header>
+
+    <section class="card">
+      <div class="card-title">⚙️ إعدادات الخادم الخلفي</div>
+      <div class="setting-row">
+        <label for="useBackendToggle" class="setting-label">استخدام التحليل العميق (Backend)</label>
+        <input type="checkbox" id="useBackendToggle" />
+      </div>
+      <div class="setting-row vertical">
+        <label for="backendUrlInput" class="setting-label">رابط الخادم الخلفي</label>
+        <input type="text" id="backendUrlInput" placeholder="https://...">
+      </div>
+      <div class="setting-row">
+        <label for="sensitivitySelect" class="setting-label">حساسية الكشف</label>
+        <select id="sensitivitySelect">
+          <option value="low">منخفضة</option>
+          <option value="medium">متوسطة</option>
+          <option value="high">مرتفعة</option>
+        </select>
+      </div>
+      <div class="setting-row">
+        <label for="enabledToggle" class="setting-label">تفعيل الحماية</label>
+        <input type="checkbox" id="enabledToggle" />
+      </div>
+      <div class="button-group">
+        <button id="saveBtn">حفظ</button>
+        <button id="clearHistoryBtn">مسح السجل</button>
+      </div>
+      <p id="msgText" class="msg-text"></p>
+    </section>
+
+    <section class="card">
+      <div class="card-title">📜 سجل الفحص الأخير</div>
+      <ul class="logs-list" id="logsList">
+        <li class="log-item empty">لا توجد عمليات فحص حالية</li>
+      </ul>
+    </section>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
