@@ -1,19 +1,41 @@
-import { evaluate, SCORING_CONSTANTS } from "./lib/scoring.js";
-
+import { evaluate } from "./lib/scoring.js";
+import { buildNotificationTitle, buildNotificationMessage } from "./lib/alert.js";
+import { getHostname, resolveFilename } from "./lib/heuristics.js";
+import { getHistory, addHistoryEntry, clearHistory } from "./lib/history.js";
 // A. Constants
 
 const DEFAULT_SETTINGS = {
   enabled: true,
-  useBackend: false,
-  backendUrl: "",
   autoResumeSafe: true,
   trustedDomains: [],
   sensitivity: "medium",
 };
 
+// Backend analysis was never implemented and was removed for 0.1.0. These keys
+// can still exist in chrome.storage.local from earlier builds, so they are
+// stripped on every read/write instead of being silently carried forward.
+const RETIRED_SETTINGS_KEYS = Object.freeze(["useBackend", "backendUrl"]);
+
+/**
+ * Removes retired settings keys from a settings object.
+ *
+ * @param {Record<string, unknown>} settings - Settings to clean.
+ * @returns {Record<string, unknown>} A copy without retired keys.
+ */
+function stripRetiredSettings(settings) {
+  const cleaned = { ...settings };
+  for (const key of RETIRED_SETTINGS_KEYS) {
+    delete cleaned[key];
+  }
+  return cleaned;
+}
+
 const DEBUG_ANALYSIS_DELAY_MS = 2000;
 const DEBUG_FORCE_ERROR = false;
+const DECISION_TIMEOUT_MS = 120000;
 const LOG_PREFIX = "[DG]";
+
+const activeResolutions = new Set();
 
 // B. Storage helpers
 
@@ -27,7 +49,9 @@ async function getSettings() {
     const { settings = {} } = await chrome.storage.local.get("settings");
     return {
       ...DEFAULT_SETTINGS,
-      ...(settings && typeof settings === "object" ? settings : {}),
+      ...stripRetiredSettings(
+        settings && typeof settings === "object" ? settings : {},
+      ),
     };
   } catch (error) {
     console.error(`${LOG_PREFIX} settings read failed; using defaults`, error);
@@ -44,10 +68,10 @@ async function getSettings() {
 async function setSettings(partial) {
   try {
     const current = await getSettings();
-    const next = {
+    const next = stripRetiredSettings({
       ...current,
       ...(partial && typeof partial === "object" ? partial : {}),
-    };
+    });
     await chrome.storage.local.set({ settings: next });
     return next;
   } catch (error) {
@@ -158,6 +182,7 @@ async function handleNewDownload(item) {
   }
 
   let shouldSettle = false;
+  let outcome = "pending";
 
   try {
     const pendingSaved = await markPending(downloadId, {
@@ -196,39 +221,187 @@ async function handleNewDownload(item) {
     }
 
     try {
-      log("analysis started", downloadId, "Step 1 placeholder");
+      log("analysis started", downloadId, "local heuristics");
       const result = await analyzeDownload(item, settings);
       log("analysis finished", downloadId, `verdict=${result.verdict}, source=${result.source}`);
-      // #region agent log
-      await fetch('http://127.0.0.1:7471/ingest/c65017e1-d2c9-452e-a774-e91be2c5aea3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'307455'},body:JSON.stringify({sessionId:'307455',runId:'post-fix',hypothesisId:'D',location:'background.js:handleNewDownload',message:'analysis finished',data:{downloadId,verdict:result.verdict,source:result.source,score:result.score},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
+
+      let latestItem;
+      try {
+        [latestItem] = await chrome.downloads.search({ id: downloadId });
+      } catch (searchError) {
+        log("post-analysis search failed", downloadId, searchError?.message || String(searchError));
+      }
+
+      if (!latestItem || latestItem.state !== "in_progress") {
+        log(
+          "analysis result ignored",
+          downloadId,
+          `state=${latestItem?.state || "not found"}`,
+        );
+        outcome = "ignored";
+        return;
+      }
+
+      if (result && (result.verdict === "suspicious" || result.verdict === "dangerous")) {
+        outcome = await holdDownload(item, result);
+      } else {
+        outcome = "resumed";
+      }
     } catch (analysisError) {
       log("analysis error", downloadId, analysisError?.message || String(analysisError));
-      // #region agent log
-      await fetch('http://127.0.0.1:7471/ingest/c65017e1-d2c9-452e-a774-e91be2c5aea3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'307455'},body:JSON.stringify({sessionId:'307455',runId:'post-fix',hypothesisId:'D',location:'background.js:handleNewDownload',message:'analysis threw',data:{downloadId,errorName:analysisError?.name,errorMessage:analysisError?.message||String(analysisError)},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       const result = { verdict: "safe", source: "error-fallback" };
       log("analysis fallback", downloadId, `verdict=${result.verdict}, source=${result.source}`);
+      outcome = "resumed";
     }
   } catch (error) {
     log("handler error", downloadId, error?.message || String(error));
+    outcome = "resumed";
   } finally {
-    if (shouldSettle) {
-      try {
-        log("resume requested", downloadId);
-        await chrome.downloads.resume(downloadId);
-        log("resumed", downloadId);
-      } catch (resumeError) {
-        log("resume failed", downloadId, resumeError?.message || String(resumeError));
+    try {
+      if (outcome === "pending") {
+        log("safety net resume", downloadId, "outcome was pending");
+        outcome = "resumed";
       }
+      if (outcome === "resumed" && shouldSettle) {
+        try {
+          log("resume requested", downloadId);
+          await chrome.downloads.resume(downloadId);
+          log("resumed", downloadId);
+        } catch (resumeError) {
+          log("resume failed", downloadId, resumeError?.message || String(resumeError));
+        }
+      }
+
+      if (outcome !== "held") {
+        const pendingCleared = await clearPending(downloadId);
+        log(
+          "pending cleared",
+          downloadId,
+          pendingCleared ? "session state removed" : "session state cleanup failed",
+        );
+      }
+    } catch (cleanupError) {
+      log("finally cleanup error", downloadId, cleanupError?.message || String(cleanupError));
+    }
+  }
+}
+
+/**
+ * Holds a risky download: saves verdict, creates notification, sets alarm.
+ * Never throws. Returns the outcome: "held", "resumed", or "cancelled".
+ * @param {chrome.downloads.DownloadItem} item
+ * @param {{verdict: string, reasons: Array<any>, score?: number, source?: string}} result
+ * @returns {Promise<string>}
+ */
+async function holdDownload(item, result) {
+  const downloadId = item.id;
+  const verdict = result?.verdict || "suspicious";
+  try {
+    const key = pendingKey(downloadId);
+    let existing = {};
+    try {
+      const data = await chrome.storage.session.get(key);
+      if (data && data[key]) {
+        existing = data[key] || {};
+      }
+    } catch (_e) {
+      // ignore
     }
 
-    const pendingCleared = await clearPending(downloadId);
-    log(
-      "pending cleared",
-      downloadId,
-      pendingCleared ? "session state removed" : "session state cleanup failed",
-    );
+    const sourceUrl = item.finalUrl || item.url || "";
+    const host = getHostname(sourceUrl);
+    const ctx = buildContext(item);
+    const filename = resolveFilename(ctx);
+
+    existing.verdict = verdict;
+    existing.reasons = result?.reasons;
+    existing.score = result?.score;
+    existing.source = result?.source || "local";
+    existing.filename = filename;
+    existing.url = sourceUrl;
+    existing.host = host;
+    await chrome.storage.session.set({ [key]: existing });
+
+    log("notification creating", downloadId);
+    let notificationFailed = false;
+    let notificationErrorMsg = null;
+    try {
+      await new Promise((resolve) => {
+        try {
+          chrome.notifications.create(
+            notificationIdForDownload(downloadId),
+            {
+              type: "basic",
+              iconUrl: "icons/icon-128.png",
+              title: buildNotificationTitle(verdict),
+              message: buildNotificationMessage(filename, host, result?.reasons || []),
+              requireInteraction: true,
+              buttons: [
+                { title: "Cancel download" },
+                { title: "Allow anyway" },
+              ],
+            },
+            (id) => {
+              if (chrome.runtime.lastError) {
+                resolve({ error: chrome.runtime.lastError.message });
+              } else {
+                resolve({ ok: true, id });
+              }
+            }
+          );
+        } catch (e) {
+          console.error("[DG] notification construction/create exception", e);
+          resolve({ error: e?.stack || e?.message || String(e) });
+        }
+      }).then((res) => {
+        if (res && res.error) {
+          notificationFailed = true;
+          notificationErrorMsg = res.error;
+        }
+      });
+    } catch (e) {
+      notificationFailed = true;
+      notificationErrorMsg = e?.message || String(e);
+    }
+
+    if (notificationFailed) {
+      log("notification create failed", downloadId, notificationErrorMsg || "unknown error");
+    } else {
+      log("notification created", downloadId);
+    }
+
+    const alarmDelayMs = DECISION_TIMEOUT_MS;
+    try {
+      await chrome.alarms.create(alarmNameForDownload(downloadId), {
+        delayInMinutes: alarmDelayMs / 60000,
+      });
+      log("alarm set", downloadId, `dg-timeout-${downloadId} in ${alarmDelayMs}ms`);
+    } catch (alarmErr) {
+      log("alarm create failed", downloadId, alarmErr?.message || String(alarmErr));
+    }
+
+    if (notificationFailed) {
+      if (verdict === "dangerous") {
+        await resolveDecision(downloadId, "cancel", "notification-failed");
+        return "cancelled";
+      }
+      await resolveDecision(downloadId, "allow", "notification-failed");
+      return "resumed";
+    }
+    return "held";
+  } catch (e) {
+    log("holdDownload error", downloadId, e?.message || String(e));
+    try {
+      if (verdict === "dangerous") {
+        await resolveDecision(downloadId, "cancel", "hold-error");
+        return "cancelled";
+      }
+      await resolveDecision(downloadId, "allow", "hold-error");
+      return "resumed";
+    } catch (e2) {
+      log("holdDownload fallback failed", downloadId, e2?.message || String(e2));
+      return "resumed";
+    }
   }
 }
 
@@ -252,7 +425,11 @@ function buildContext(item) {
 }
 
 /**
- * Simulates asynchronous analysis without applying any security rules.
+ * Runs the local heuristic + scoring analysis for one download.
+ *
+ * Analysis is entirely local: no network request is made and no backend URL is
+ * consulted. The configured delay keeps the download paused long enough for the
+ * heuristics to run, matching the "pauses downloads briefly" product behaviour.
  *
  * @param {chrome.downloads.DownloadItem} item - The download being analyzed.
  * @param {Record<string, unknown>} settings - Current extension settings.
@@ -260,9 +437,6 @@ function buildContext(item) {
  */
 async function analyzeDownload(item, settings) {
   const ctx = buildContext(item);
-  // #region agent log
-  await fetch('http://127.0.0.1:7471/ingest/c65017e1-d2c9-452e-a774-e91be2c5aea3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'307455'},body:JSON.stringify({sessionId:'307455',runId:'post-fix',hypothesisId:'A,B,E',location:'background.js:analyzeDownload:entry',message:'analyzeDownload entry',data:{downloadId:item?.id,hasEvaluate:typeof evaluate==='function',enforce:SCORING_CONSTANTS?.ENFORCE_VERDICTS,settingsType:typeof settings,ctxFilename:ctx.filename,ctxUrl:ctx.url,ctxFinalUrl:ctx.finalUrl},timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
   log("analysis delay", item.id, `${DEBUG_ANALYSIS_DELAY_MS}ms`);
   await new Promise((resolve) => setTimeout(resolve, DEBUG_ANALYSIS_DELAY_MS));
 
@@ -270,18 +444,12 @@ async function analyzeDownload(item, settings) {
     throw new Error("DEBUG_FORCE_ERROR is enabled");
   }
 
-  let heuristicReasons = [];
+  let heuristicReasons;
   try {
-    const verdictResult = evaluate(ctx, { sensitivity: "medium" });
-    heuristicReasons = verdictResult.reasons;
-    // #region agent log
-    await fetch('http://127.0.0.1:7471/ingest/c65017e1-d2c9-452e-a774-e91be2c5aea3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'307455'},body:JSON.stringify({sessionId:'307455',runId:'post-fix',hypothesisId:'C',location:'background.js:analyzeDownload:heuristics',message:'first evaluate ok',data:{downloadId:item.id,reasonCount:heuristicReasons.length,score:verdictResult.score,source:verdictResult.source},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
+    const firstPass = evaluate(ctx, { sensitivity: "medium" });
+    heuristicReasons = firstPass.reasons;
   } catch (heuristicError) {
     log("heuristics error", item.id, heuristicError?.message || String(heuristicError));
-    // #region agent log
-    await fetch('http://127.0.0.1:7471/ingest/c65017e1-d2c9-452e-a774-e91be2c5aea3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'307455'},body:JSON.stringify({sessionId:'307455',runId:'post-fix',hypothesisId:'C',location:'background.js:analyzeDownload:heuristics',message:'first evaluate threw',data:{downloadId:item.id,errorName:heuristicError?.name,errorMessage:heuristicError?.message||String(heuristicError)},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     heuristicReasons = [];
   }
 
@@ -296,18 +464,10 @@ async function analyzeDownload(item, settings) {
   }
 
   let verdictResult;
-  let enforceVerdicts = false;
   try {
-    enforceVerdicts = SCORING_CONSTANTS.ENFORCE_VERDICTS === true;
     verdictResult = evaluate(ctx, settings);
-    // #region agent log
-    await fetch('http://127.0.0.1:7471/ingest/c65017e1-d2c9-452e-a774-e91be2c5aea3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'307455'},body:JSON.stringify({sessionId:'307455',runId:'post-fix',hypothesisId:'A',location:'background.js:analyzeDownload:scoring',message:'second evaluate ok',data:{downloadId:item.id,verdict:verdictResult.verdict,score:verdictResult.score,source:verdictResult.source,settingsType:typeof settings},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
   } catch (scoringError) {
     log("scoring error", item.id, scoringError?.message || String(scoringError));
-    // #region agent log
-    await fetch('http://127.0.0.1:7471/ingest/c65017e1-d2c9-452e-a774-e91be2c5aea3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'307455'},body:JSON.stringify({sessionId:'307455',runId:'post-fix',hypothesisId:'A',location:'background.js:analyzeDownload:scoring',message:'second evaluate threw',data:{downloadId:item.id,errorName:scoringError?.name,errorMessage:scoringError?.message||String(scoringError),settingsType:typeof settings},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     const scoreSum = heuristicReasons.reduce(
       (sum, reason) => (typeof reason.points === "number" ? sum + reason.points : sum),
       0,
@@ -327,14 +487,9 @@ async function analyzeDownload(item, settings) {
   );
 
   if (
-    !enforceVerdicts &&
     (verdictResult.verdict === "suspicious" || verdictResult.verdict === "dangerous")
   ) {
-    log(
-      "would have held",
-      item.id,
-      `(${verdictResult.verdict}) score=${verdictResult.score}`,
-    );
+    log("holding", item.id, `(${verdictResult.verdict}) score=${verdictResult.score}`);
   }
 
   return {
@@ -359,38 +514,46 @@ async function recoverPendingDownloads(trigger) {
   log("recovery started", "system", trigger);
   const pendingDownloads = await getAllPending();
 
-  for (const { id: downloadId } of pendingDownloads) {
-    try {
-      let item;
-      try {
-        [item] = await chrome.downloads.search({ id: downloadId });
-      } catch (searchError) {
-        log("recovery search failed", downloadId, searchError?.message || String(searchError));
-      }
-
-      if (item?.state === "in_progress" && item.paused) {
-        try {
-          log("recovery resume requested", downloadId, trigger);
-          await chrome.downloads.resume(downloadId);
-          log("recovery resumed", downloadId);
-        } catch (resumeError) {
-          log("recovery resume failed", downloadId, resumeError?.message || String(resumeError));
-        }
-      } else {
-        log("recovery skipped", downloadId, `state=${item?.state || "not found"}`);
-      }
-    } finally {
-      const pendingCleared = await clearPending(downloadId);
-      log(
-        "recovery cleared",
-        downloadId,
-        pendingCleared ? "session state removed" : "session state cleanup failed",
-      );
+  for (const { id: downloadId, data } of pendingDownloads) {
+    // A held download has a verdict stored in its session entry. The notification
+    // and alarm were created before the restart and are still live. Leave the
+    // session entry intact so resolveDecision() can still act on button/timeout.
+    if (data && typeof data.verdict === "string" && data.verdict) {
+      log("recovery skipped (held)", downloadId, `verdict=${data.verdict}`);
+      continue;
     }
+
+    // Non-held download: resume if still paused, then clear session state.
+    let item;
+    try {
+      [item] = await chrome.downloads.search({ id: downloadId });
+    } catch (searchError) {
+      log("recovery search failed", downloadId, searchError?.message || String(searchError));
+    }
+
+    if (item?.state === "in_progress" && item.paused) {
+      try {
+        log("recovery resume requested", downloadId, trigger);
+        await chrome.downloads.resume(downloadId);
+        log("recovery resumed", downloadId);
+      } catch (resumeError) {
+        log("recovery resume failed", downloadId, resumeError?.message || String(resumeError));
+      }
+    } else {
+      log("recovery skipped", downloadId, `state=${item?.state || "not found"}`);
+    }
+
+    const pendingCleared = await clearPending(downloadId);
+    log(
+      "recovery cleared",
+      downloadId,
+      pendingCleared ? "session state removed" : "session state cleanup failed",
+    );
   }
 
   log("recovery finished", "system", `${pendingDownloads.length} pending download(s)`);
 }
+
 
 /**
  * Starts recovery after the extension is installed or updated.
@@ -410,6 +573,204 @@ function onStartup() {
   void recoverPendingDownloads("onStartup");
 }
 
+function onAlarm(alarm) {
+  if (!alarm || !alarm.name || !alarm.name.startsWith("dg-timeout-")) {
+    return;
+  }
+  const downloadId = Number(alarm.name.slice("dg-timeout-".length));
+  if (!Number.isInteger(downloadId)) {
+    return;
+  }
+  void resolveDecision(downloadId, "cancel", "timeout");
+}
+
+function onNotificationButtonClicked(notificationId, buttonIndex) {
+  if (!notificationId || !notificationId.startsWith("dg-")) {
+    return;
+  }
+  const downloadId = Number(notificationId.slice("dg-".length));
+  if (!Number.isInteger(downloadId)) {
+    return;
+  }
+  if (buttonIndex === 0) {
+    void resolveDecision(downloadId, "cancel", "user-button");
+  } else if (buttonIndex === 1) {
+    void resolveDecision(downloadId, "allow", "user-button");
+  }
+}
+
+function onNotificationClosed(notificationId, byUser) {
+  if (!notificationId || !notificationId.startsWith("dg-")) {
+    return;
+  }
+  const downloadId = Number(notificationId.slice("dg-".length));
+  if (!Number.isInteger(downloadId)) {
+    return;
+  }
+  if (byUser) {
+    void resolveDecision(downloadId, "cancel", "notification-closed");
+  }
+}
+
+async function onDownloadsChanged(downloadDelta) {
+  const downloadId = downloadDelta.id;
+  if (!Number.isInteger(downloadId)) {
+    return;
+  }
+  const key = pendingKey(downloadId);
+  let hasPending = false;
+  try {
+    const data = await chrome.storage.session.get(key);
+    hasPending = !!(data && data[key]);
+  } catch (_e) {
+    // ignore
+  }
+  if (!hasPending) {
+    return;
+  }
+  if (downloadDelta.state && downloadDelta.state.current !== "in_progress") {
+    // Download ended externally (e.g., user cancelled via Chrome download bar).
+    // Clean up the associated UI and session state. resolveDecision() is not
+    // called here because the download is already terminal.
+    log("external state change", downloadId, `state=${downloadDelta.state.current}`);
+    await clearNotificationForDownload(downloadId);
+    await clearAlarmForDownload(downloadId);
+    await clearPending(downloadId);
+    log("external cleanup done", downloadId);
+  }
+}
+
+function alarmNameForDownload(downloadId) {
+  return `dg-timeout-${downloadId}`;
+}
+
+function notificationIdForDownload(downloadId) {
+  return `dg-${downloadId}`;
+}
+
+async function clearAlarmForDownload(downloadId) {
+  try {
+    await chrome.alarms.clear(alarmNameForDownload(downloadId));
+  } catch (error) {
+    log("alarm clear failed", downloadId, error?.message || String(error));
+  }
+}
+
+async function clearNotificationForDownload(downloadId) {
+  try {
+    chrome.notifications.clear(notificationIdForDownload(downloadId), () => {});
+  } catch (error) {
+    log("notification clear failed", downloadId, error?.message || String(error));
+  }
+}
+
+/**
+ * Resolves a held download decision.
+ *
+ * @param {number} downloadId - Download ID.
+ * @param {"allow" | "cancel"} action - User action.
+ * @param {string} cause - Cause of decision.
+ * @returns {Promise<{ok: boolean, error?: string}>}
+ */
+async function resolveDecision(downloadId, action, cause) {
+  if (activeResolutions.has(downloadId)) {
+    return { ok: false, error: "already resolved" };
+  }
+  activeResolutions.add(downloadId);
+
+  try {
+    const key = pendingKey(downloadId);
+    let pending;
+    try {
+      const data = await chrome.storage.session.get(key);
+      pending = data[key];
+      if (!pending || typeof pending !== "object") {
+        activeResolutions.delete(downloadId);
+        return { ok: false, error: "already resolved" };
+      }
+    } catch (error) {
+      log("resolve read pending failed", downloadId, error?.message || String(error));
+      activeResolutions.delete(downloadId);
+      return { ok: false, error: error?.message || String(error) };
+    }
+
+    if (action === "allow") {
+      try {
+        await chrome.downloads.resume(downloadId);
+        log("decision allow", downloadId, cause);
+      } catch (resumeError) {
+        log("decision allow resume failed", downloadId, resumeError?.message || String(resumeError));
+        activeResolutions.delete(downloadId);
+        return { ok: false, error: resumeError?.message || String(resumeError) };
+      }
+    } else if (action === "cancel") {
+      let cancelSuccess = false;
+      try {
+        await chrome.downloads.cancel(downloadId);
+        cancelSuccess = true;
+      } catch (cancelError) {
+        let item;
+        try {
+          [item] = await chrome.downloads.search({ id: downloadId });
+        } catch (_sErr) {
+          // ignore
+        }
+        if (item && item.state !== "in_progress") {
+          cancelSuccess = true;
+        } else {
+          log("decision cancel failed", downloadId, cancelError?.message || String(cancelError));
+          activeResolutions.delete(downloadId);
+          return { ok: false, error: cancelError?.message || String(cancelError) };
+        }
+      }
+
+      if (cancelSuccess) {
+        try {
+          await chrome.downloads.removeFile(downloadId);
+        } catch (e) {
+          log("decision removeFile failed", downloadId, e?.message || String(e));
+        }
+        try {
+          await chrome.downloads.erase({ id: downloadId });
+        } catch (e) {
+          log("decision erase failed", downloadId, e?.message || String(e));
+        }
+        log("decision cancel", downloadId, cause);
+      }
+    }
+
+    // Chrome operation succeeded or verified terminal.
+    // 1. Record persistent history entry BEFORE clearing pending session state
+    try {
+      await addHistoryEntry({
+        downloadId: downloadId,
+        timestamp: Date.now(),
+        filename: pending.filename || "",
+        url: pending.url || "",
+        hostname: pending.host || pending.hostname || "",
+        verdict: pending.verdict || "unknown",
+        score: typeof pending.score === "number" ? pending.score : 0,
+        decision: action,
+        cause: cause,
+        source: pending.source || "local",
+      });
+    } catch (historyErr) {
+      log("history record error", downloadId, historyErr?.message || String(historyErr));
+    }
+
+    // 2. Clean up notification, alarm, and pending session storage.
+    await clearNotificationForDownload(downloadId);
+    await clearAlarmForDownload(downloadId);
+    await clearPending(downloadId);
+
+    return { ok: true };
+  } catch (error) {
+    log("resolve decision error", downloadId, error?.message || String(error));
+    activeResolutions.delete(downloadId);
+    return { ok: false, error: error?.message || String(error) };
+  }
+}
+
 // F. Message handlers (stubs only)
 
 /**
@@ -422,6 +783,10 @@ function onStartup() {
  */
 function onMessage(message, sender, sendResponse) {
   if (!message || typeof message.type !== "string") {
+    return undefined;
+  }
+  if (sender && sender.id && sender.id !== chrome.runtime.id) {
+    sendResponse({ ok: false, error: "rejected" });
     return undefined;
   }
 
@@ -439,7 +804,38 @@ function onMessage(message, sender, sendResponse) {
     return true;
   }
 
-  if (["GET_HISTORY", "ANALYZE_URL", "USER_DECISION"].includes(message.type)) {
+  if (message.type === "USER_DECISION") {
+    const downloadId = message.downloadId;
+    const action = message.action;
+    if (typeof downloadId !== "number" || !Number.isInteger(downloadId)) {
+      sendResponse({ ok: false, error: "invalid downloadId" });
+      return undefined;
+    }
+    if (action !== "allow" && action !== "cancel") {
+      sendResponse({ ok: false, error: "invalid action" });
+      return undefined;
+    }
+    void resolveDecision(downloadId, action, "message")
+      .then((res) => sendResponse(res))
+      .catch((error) => sendResponse({ ok: false, error: error?.message || String(error) }));
+    return true;
+  }
+
+  if (message.type === "GET_HISTORY") {
+    void getHistory()
+      .then((history) => sendResponse({ ok: true, history }))
+      .catch((error) => sendResponse({ ok: false, error: error?.message || String(error) }));
+    return true;
+  }
+
+  if (message.type === "CLEAR_HISTORY") {
+    void clearHistory()
+      .then((ok) => sendResponse({ ok }))
+      .catch((error) => sendResponse({ ok: false, error: error?.message || String(error) }));
+    return true;
+  }
+
+  if (["ANALYZE_URL"].includes(message.type)) {
     sendResponse({ ok: false, error: "not implemented" });
     return undefined;
   }
@@ -447,10 +843,9 @@ function onMessage(message, sender, sendResponse) {
   return undefined;
 }
 
-// TODO(step 2): decision history + notifications
-// TODO(step 3): redirect tracking + typosquat detection
-// TODO(step 4): heuristics, scoring, and optional backend analysis
-// TODO(step 5): popup, options, and content-script integration
+// TODO(step 3): redirect tracking + typosquat detection. Still outstanding:
+// buildContext() hardcodes redirectChain: [], so the redirect-chain and
+// lookalike-domain heuristics currently always see an empty chain.
 
 // G. Listener registration (must remain synchronous and top-level)
 
@@ -458,5 +853,28 @@ chrome.downloads.onCreated.addListener(handleNewDownload);
 chrome.runtime.onMessage.addListener(onMessage);
 chrome.runtime.onInstalled.addListener(onInstalled);
 chrome.runtime.onStartup.addListener(onStartup);
+chrome.alarms.onAlarm.addListener(onAlarm);
+chrome.notifications.onButtonClicked.addListener(onNotificationButtonClicked);
+chrome.notifications.onClosed.addListener(onNotificationClosed);
+chrome.downloads.onChanged.addListener(onDownloadsChanged);
 
 void recoverPendingDownloads("worker startup");
+
+export {
+  handleNewDownload,
+  holdDownload,
+  resolveDecision,
+  activeResolutions,
+  recoverPendingDownloads,
+  onDownloadsChanged,
+  markPending,
+  clearPending,
+  pendingKey,
+  getSettings,
+  setSettings,
+  getHistory,
+  addHistoryEntry,
+  clearHistory,
+};
+
+

@@ -23,9 +23,8 @@
   },
   "permissions": [
     "downloads",
-    "storage"
-  ],
-  "host_permissions": [
-    "http://127.0.0.1:7471/*"
+    "storage",
+    "notifications",
+    "alarms"
   ]
 }

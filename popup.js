@@ -1,21 +1,19 @@
-// Popup UI for Cyber Guard
+// Popup UI for Cyber Guard.
+// DOM wiring only; pure helpers live in ./lib/popup-core.js so they can be
+// unit tested without a browser.
+import { sendMessage, getVerdictPresentation, toHistoryRow, buildSettingsPatch } from "./lib/popup-core.js";
+
 const STRINGS = {
   statusActive: "حماية نشطة",
   statusOff: "الحماية متوقفة",
   saveSuccess: "تم حفظ الإعدادات بنجاح",
   saveError: "فشل في حفظ الإعدادات",
   loadError: "فشل في تحميل الإعدادات",
-  backendUrlError: "رابط الخادم الخلفي غير صالح",
   noHistory: "لا توجد عمليات فحص حالية",
 };
 
-let loadedSettings = null;
-let saveButtonDisabled = false;
-
 const statusBadge = document.getElementById("statusBadge");
 const statusText = document.getElementById("statusText");
-const useBackendToggle = document.getElementById("useBackendToggle");
-const backendUrlInput = document.getElementById("backendUrlInput");
 const sensitivitySelect = document.getElementById("sensitivitySelect");
 const enabledToggle = document.getElementById("enabledToggle");
 const saveBtn = document.getElementById("saveBtn");
@@ -45,68 +43,10 @@ function setMessage(text, type) {
   }
 }
 
-function sendMessage(msg) {
-  try {
-    if (!chrome || !chrome.runtime || typeof chrome.runtime.sendMessage !== "function") {
-      return { ok: false, error: "runtime unavailable" };
-    }
-    const response = chrome.runtime.sendMessage(msg);
-    // Though not always async here, just in case; but spec says sendMessage is sync-like in some cases - we just need to check
-    if (response && typeof response.then === "function") {
-      // If it returns a promise, handle with callback style not needed; but better to handle
-      // For this simple case, we'll use a callback approach via runtime
-    }
-  } catch (e) {
-    return { ok: false, error: e?.message || String(e) };
-  }
-
-  // Try with callback for async responses
-  return new Promise((resolve) => {
-    try {
-      chrome.runtime.sendMessage(msg, (resp) => {
-        if (chrome.runtime.lastError) {
-          resolve({ ok: false, error: chrome.runtime.lastError.message || String(chrome.runtime.lastError) });
-          return;
-        }
-        if (!resp || typeof resp !== "object") {
-          resolve({ ok: false, error: "invalid response" });
-          return;
-        }
-        resolve(resp);
-      });
-    } catch (e) {
-      resolve({ ok: false, error: e?.message || String(e) });
-    }
-  });
-}
-
-function isValidBackendUrl(url) {
-  if (typeof url !== "string") {
-    return false;
-  }
-  const trimmed = url.trim();
-  if (trimmed === "") {
-    return true;
-  }
-  if (trimmed.startsWith("https://")) {
-    return true;
-  }
-  if (trimmed.startsWith("http://localhost")) {
-    return true;
-  }
-  if (trimmed.startsWith("http://127.0.0.1")) {
-    return true;
-  }
-  return false;
-}
-
 function populateForm(settings) {
   if (!settings || typeof settings !== "object") {
     return;
   }
-  loadedSettings = settings;
-  useBackendToggle.checked = !!settings.useBackend;
-  backendUrlInput.value = typeof settings.backendUrl === "string" ? settings.backendUrl : "";
   const sens = settings.sensitivity;
   if (sens === "low" || sens === "medium" || sens === "high") {
     sensitivitySelect.value = sens;
@@ -118,53 +58,40 @@ function populateForm(settings) {
 }
 
 function createLogItem(entry) {
+  const row = toHistoryRow(entry);
+
   const li = document.createElement("li");
   li.classList.add("log-item");
-  
+
   const left = document.createElement("div");
+
   const filename = document.createElement("div");
-  filename.textContent = entry && typeof entry.filename === "string" ? entry.filename : "";
-  const meta = document.createElement("div");
-  const parts = [];
-  if (entry && typeof entry.host === "string") {
-    parts.push(entry.host);
-  }
-  if (entry && typeof entry.score === "number") {
-    parts.push("score:" + entry.score);
-  }
-  if (entry && entry.timestamp) {
-    try {
-      parts.push(new Date(entry.timestamp).toLocaleString());
-    } catch (e) {
-      // ignore
-    }
-  }
-  meta.textContent = parts.join(" | ");
+  filename.textContent = row.filename;
   left.appendChild(filename);
+
+  const meta = document.createElement("div");
+  meta.textContent = row.meta;
   left.appendChild(meta);
-  
+
   const right = document.createElement("div");
-  if (entry && typeof entry.verdict === "string") {
-    const v = entry.verdict;
+  const presentation = getVerdictPresentation(row.verdict);
+  if (presentation) {
     const badge = document.createElement("span");
-    badge.classList.add("verdict-badge");
-    if (v === "safe") {
-      badge.classList.add("verdict-safe");
-      badge.textContent = "آمن";
-    } else if (v === "suspicious") {
-      badge.classList.add("verdict-suspicious");
-      badge.textContent = "مشكوك";
-    } else if (v === "dangerous") {
-      badge.classList.add("verdict-dangerous");
-      badge.textContent = "خطير";
-    } else {
-      badge.textContent = v;
-    }
+    badge.classList.add("verdict-badge", presentation.className);
+    badge.textContent = presentation.label;
     right.appendChild(badge);
   }
+
   li.appendChild(left);
   li.appendChild(right);
   return li;
+}
+
+function appendEmptyRow() {
+  const empty = document.createElement("li");
+  empty.classList.add("log-item", "empty");
+  empty.textContent = STRINGS.noHistory;
+  logsList.appendChild(empty);
 }
 
 async function loadSettings() {
@@ -184,45 +111,25 @@ async function loadHistory() {
   while (logsList.firstChild) {
     logsList.removeChild(logsList.firstChild);
   }
-  if (resp && resp.ok && Array.isArray(resp.history)) {
-    if (resp.history.length === 0) {
-      const empty = document.createElement("li");
-      empty.classList.add("log-item", "empty");
-      empty.textContent = STRINGS.noHistory;
-      logsList.appendChild(empty);
-    } else {
-      const max = resp.history.length;
-      for (let i = 0; i < max; i++) {
-        logsList.appendChild(createLogItem(resp.history[i]));
-      }
-    }
-  } else {
-    const empty = document.createElement("li");
-    empty.classList.add("log-item", "empty");
-    empty.textContent = STRINGS.noHistory;
-    logsList.appendChild(empty);
+  const history = resp && resp.ok && Array.isArray(resp.history) ? resp.history : [];
+  if (history.length === 0) {
+    appendEmptyRow();
+    return;
+  }
+  for (const entry of history) {
+    logsList.appendChild(createLogItem(entry));
   }
 }
 
 async function saveSettings() {
-  const settings = {
-    ...(loadedSettings || {}),
-  };
-  settings.useBackend = !!useBackendToggle.checked;
-  settings.backendUrl = backendUrlInput.value;
-  const sens = sensitivitySelect.value;
-  if (sens === "low" || sens === "medium" || sens === "high") {
-    settings.sensitivity = sens;
-  }
-  settings.enabled = !!enabledToggle.checked;
-  
-  if (!isValidBackendUrl(settings.backendUrl)) {
-    setMessage(STRINGS.backendUrlError, "error");
-    return;
-  }
-  
   setMessage("", null);
-  const resp = await sendMessage({ type: "SET_SETTINGS", settings });
+  const resp = await sendMessage({
+    type: "SET_SETTINGS",
+    settings: buildSettingsPatch({
+      sensitivity: sensitivitySelect.value,
+      enabled: enabledToggle.checked,
+    }),
+  });
   if (resp && resp.ok) {
     if (resp.settings) {
       populateForm(resp.settings);
@@ -240,31 +147,48 @@ async function clearHistory() {
 }
 
 saveBtn.addEventListener("click", () => {
-  saveSettings();
+  void saveSettings().catch(() => {
+    setMessage(STRINGS.saveError, "error");
+  });
 });
 
 clearHistoryBtn.addEventListener("click", () => {
-  clearHistory();
+  void clearHistory().catch(() => {
+    setMessage(STRINGS.saveError, "error");
+  });
 });
 
 enabledToggle.addEventListener("change", () => {
   setStatus(enabledToggle.checked);
 });
 
-document.addEventListener("DOMContentLoaded", () => {
-  loadSettings();
-  loadHistory();
-});
+function init() {
+  void loadSettings().catch(() => {
+    setMessage(STRINGS.loadError, "error");
+  });
+  void loadHistory().catch(() => {
+    // History is best-effort in the popup; the settings row already reports errors.
+  });
+}
 
-if (chrome && chrome.storage && chrome.storage.onChanged) {
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", init);
+} else {
+  init();
+}
+
+if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.onChanged) {
   chrome.storage.onChanged.addListener((changes, area) => {
-    if (area === "local") {
-      if (changes.history || changes.settings) {
-        loadHistory();
-        if (changes.settings) {
-          loadSettings();
-        }
-      }
+    if (area !== "local") {
+      return;
+    }
+    if (changes.history) {
+      void loadHistory().catch(() => {});
+    }
+    if (changes.settings) {
+      void loadSettings().catch(() => {
+        setMessage(STRINGS.loadError, "error");
+      });
     }
   });
 }
