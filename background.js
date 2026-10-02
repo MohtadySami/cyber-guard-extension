@@ -13,6 +13,7 @@ const DEFAULT_SETTINGS = {
 
 const DEBUG_ANALYSIS_DELAY_MS = 2000;
 const DEBUG_FORCE_ERROR = false;
+const DECISION_TIMEOUT_MS = 120000;
 const LOG_PREFIX = "[DG]";
 
 // B. Storage helpers
@@ -410,6 +411,142 @@ function onStartup() {
   void recoverPendingDownloads("onStartup");
 }
 
+/**
+ * Creates a notification for a held download.
+ *
+ * @param {number} downloadId - Download ID.
+ * @param {string} verdict - "suspicious" or "dangerous".
+ * @param {string} filename - Filename.
+ * @param {string} host - Host.
+ * @param {Array<{code: string, points: number, text: string}>} reasons - Reasons.
+ */
+function createAlertNotification(downloadId, verdict, filename, host, reasons) {
+  const title = verdict === "dangerous" ? "Dangerous download" : "Suspicious download";
+  const topReasons = Array.isArray(reasons)
+    ? reasons
+        .filter((r) => r && typeof r.points === "number" && r.points > 0)
+        .sort((a, b) => (b.points || 0) - (a.points || 0))
+        .slice(0, 3)
+    : [];
+  const lines = [];
+  if (filename) {
+    lines.push(`File: ${filename}`);
+  }
+  if (host) {
+    lines.push(`Source: ${host}`);
+  }
+  for (const r of topReasons) {
+    if (r && r.text) {
+      lines.push(r.text);
+    }
+  }
+  const message = lines.join("\n");
+  try {
+    chrome.notifications.create(
+      `dg-${downloadId}`,
+      {
+        type: "basic",
+        iconUrl: "icons/icon-128.png",
+        title,
+        message,
+        requireInteraction: true,
+        buttons: [
+          { title: "Cancel download" },
+          { title: "Allow anyway" },
+        ],
+      },
+      () => {
+        if (chrome.runtime.lastError) {
+          log("notification create failed", downloadId, chrome.runtime.lastError.message);
+        }
+      },
+    );
+  } catch (error) {
+    log("notification create error", downloadId, error?.message || String(error));
+    throw error;
+  }
+}
+
+function alarmNameForDownload(downloadId) {
+  return `dg-timeout-${downloadId}`;
+}
+
+function notificationIdForDownload(downloadId) {
+  return `dg-${downloadId}`;
+}
+
+async function clearAlarmForDownload(downloadId) {
+  try {
+    await chrome.alarms.clear(alarmNameForDownload(downloadId));
+  } catch (error) {
+    log("alarm clear failed", downloadId, error?.message || String(error));
+  }
+}
+
+async function clearNotificationForDownload(downloadId) {
+  try {
+    chrome.notifications.clear(notificationIdForDownload(downloadId), () => {});
+  } catch (error) {
+    log("notification clear failed", downloadId, error?.message || String(error));
+  }
+}
+
+/**
+ * Resolves a held download decision.
+ *
+ * @param {number} downloadId - Download ID.
+ * @param {"allow" | "cancel"} action - User action.
+ * @param {string} cause - Cause of decision.
+ * @returns {Promise<{ok: boolean, error?: string}>}
+ */
+async function resolveDecision(downloadId, action, cause) {
+  const key = pendingKey(downloadId);
+  let pending;
+  try {
+    const data = await chrome.storage.session.get(key);
+    pending = data[key];
+  } catch (error) {
+    log("resolve read pending failed", downloadId, error?.message || String(error));
+    pending = undefined;
+  }
+  if (!pending || typeof pending !== "object") {
+    return { ok: false, error: "already resolved" };
+  }
+  const verdict = typeof pending.verdict === "string" ? pending.verdict : "";
+  try {
+    if (action === "allow") {
+      try {
+        await chrome.downloads.resume(downloadId);
+        log("decision allow", downloadId, cause);
+      } catch (e) {
+        log("decision allow resume failed", downloadId, e?.message || String(e));
+      }
+    } else if (action === "cancel") {
+      try {
+        await chrome.downloads.cancel(downloadId);
+      } catch (e) {
+        log("decision cancel failed", downloadId, e?.message || String(e));
+      }
+      try {
+        await chrome.downloads.removeFile(downloadId);
+      } catch (e) {
+        log("decision removeFile failed", downloadId, e?.message || String(e));
+      }
+      try {
+        await chrome.downloads.erase({ id: downloadId });
+      } catch (e) {
+        log("decision erase failed", downloadId, e?.message || String(e));
+      }
+      log("decision cancel", downloadId, cause);
+    }
+  } finally {
+    await clearNotificationForDownload(downloadId);
+    await clearAlarmForDownload(downloadId);
+    await clearPending(downloadId);
+  }
+  return { ok: true };
+}
+
 // F. Message handlers (stubs only)
 
 /**
@@ -422,6 +559,10 @@ function onStartup() {
  */
 function onMessage(message, sender, sendResponse) {
   if (!message || typeof message.type !== "string") {
+    return undefined;
+  }
+  if (sender && sender.id && sender.id !== chrome.runtime.id) {
+    sendResponse({ ok: false, error: "rejected" });
     return undefined;
   }
 
@@ -439,7 +580,24 @@ function onMessage(message, sender, sendResponse) {
     return true;
   }
 
-  if (["GET_HISTORY", "ANALYZE_URL", "USER_DECISION"].includes(message.type)) {
+  if (message.type === "USER_DECISION") {
+    const downloadId = message.downloadId;
+    const action = message.action;
+    if (typeof downloadId !== "number" || !Number.isInteger(downloadId)) {
+      sendResponse({ ok: false, error: "invalid downloadId" });
+      return undefined;
+    }
+    if (action !== "allow" && action !== "cancel") {
+      sendResponse({ ok: false, error: "invalid action" });
+      return undefined;
+    }
+    void resolveDecision(downloadId, action, "message")
+      .then((res) => sendResponse(res))
+      .catch((error) => sendResponse({ ok: false, error: error?.message || String(error) }));
+    return true;
+  }
+
+  if (["GET_HISTORY", "CLEAR_HISTORY", "ANALYZE_URL"].includes(message.type)) {
     sendResponse({ ok: false, error: "not implemented" });
     return undefined;
   }
