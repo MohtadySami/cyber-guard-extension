@@ -78,7 +78,7 @@ body {
   gap: 8px;
 }
 
-input[type="password"], input[type="text"] {
+input[type="password"], input[type="text"], select {
   flex: 1;
   background-color: #0f172a;
   border: 1px solid #475569;
@@ -89,7 +89,7 @@ input[type="password"], input[type="text"] {
   outline: none;
 }
 
-input:focus {
+input:focus, select:focus {
   border-color: #22c55e;
 }
 
@@ -108,6 +108,63 @@ button {
 button:hover {
   background-color: #16a34a;
   box-shadow: 0 0 10px rgba(34, 197, 94, 0.4);
+}
+
+.button-group {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.setting-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.setting-row.vertical {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.setting-label {
+  font-size: 12px;
+  color: #e2e8f0;
+}
+
+.status-badge.off {
+  background-color: #7f1d1d;
+  color: #ef4444;
+  border-color: #dc2626;
+}
+
+.status-badge.off .status-dot {
+  background-color: #ef4444;
+  box-shadow: 0 0 8px #ef4444;
+}
+
+.verdict-badge {
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: bold;
+}
+
+.verdict-safe {
+  background-color: #064e3b;
+  color: #22c55e;
+}
+
+.verdict-suspicious {
+  background-color: #78350f;
+  color: #f59e0b;
+}
+
+.verdict-dangerous {
+  background-color: #7f1d1d;
+  color: #ef4444;
 }
 
 .msg-text {

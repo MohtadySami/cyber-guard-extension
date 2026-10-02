@@ -21,10 +21,30 @@
     </header>
 
     <section class="card">
-      <label for="apiKeyInput" class="card-title">🔑 مفتاح VirusTotal API</label>
-      <div class="input-group">
-        <input type="password" id="apiKeyInput" placeholder="أدخل الـ API Key هنا...">
+      <div class="card-title">⚙️ إعدادات الخادم الخلفي</div>
+      <div class="setting-row">
+        <label for="useBackendToggle" class="setting-label">استخدام التحليل العميق (Backend)</label>
+        <input type="checkbox" id="useBackendToggle" />
+      </div>
+      <div class="setting-row vertical">
+        <label for="backendUrlInput" class="setting-label">رابط الخادم الخلفي</label>
+        <input type="text" id="backendUrlInput" placeholder="https://...">
+      </div>
+      <div class="setting-row">
+        <label for="sensitivitySelect" class="setting-label">حساسية الكشف</label>
+        <select id="sensitivitySelect">
+          <option value="low">منخفضة</option>
+          <option value="medium">متوسطة</option>
+          <option value="high">مرتفعة</option>
+        </select>
+      </div>
+      <div class="setting-row">
+        <label for="enabledToggle" class="setting-label">تفعيل الحماية</label>
+        <input type="checkbox" id="enabledToggle" />
+      </div>
+      <div class="button-group">
         <button id="saveBtn">حفظ</button>
+        <button id="clearHistoryBtn">مسح السجل</button>
       </div>
       <p id="msgText" class="msg-text"></p>
     </section>
