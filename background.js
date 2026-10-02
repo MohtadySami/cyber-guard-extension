@@ -6,12 +6,29 @@ import { getHistory, addHistoryEntry, clearHistory } from "./lib/history.js";
 
 const DEFAULT_SETTINGS = {
   enabled: true,
-  useBackend: false,
-  backendUrl: "",
   autoResumeSafe: true,
   trustedDomains: [],
   sensitivity: "medium",
 };
+
+// Backend analysis was never implemented and was removed for 0.1.0. These keys
+// can still exist in chrome.storage.local from earlier builds, so they are
+// stripped on every read/write instead of being silently carried forward.
+const RETIRED_SETTINGS_KEYS = Object.freeze(["useBackend", "backendUrl"]);
+
+/**
+ * Removes retired settings keys from a settings object.
+ *
+ * @param {Record<string, unknown>} settings - Settings to clean.
+ * @returns {Record<string, unknown>} A copy without retired keys.
+ */
+function stripRetiredSettings(settings) {
+  const cleaned = { ...settings };
+  for (const key of RETIRED_SETTINGS_KEYS) {
+    delete cleaned[key];
+  }
+  return cleaned;
+}
 
 const DEBUG_ANALYSIS_DELAY_MS = 2000;
 const DEBUG_FORCE_ERROR = false;
@@ -32,7 +49,9 @@ async function getSettings() {
     const { settings = {} } = await chrome.storage.local.get("settings");
     return {
       ...DEFAULT_SETTINGS,
-      ...(settings && typeof settings === "object" ? settings : {}),
+      ...stripRetiredSettings(
+        settings && typeof settings === "object" ? settings : {},
+      ),
     };
   } catch (error) {
     console.error(`${LOG_PREFIX} settings read failed; using defaults`, error);
@@ -49,10 +68,10 @@ async function getSettings() {
 async function setSettings(partial) {
   try {
     const current = await getSettings();
-    const next = {
+    const next = stripRetiredSettings({
       ...current,
       ...(partial && typeof partial === "object" ? partial : {}),
-    };
+    });
     await chrome.storage.local.set({ settings: next });
     return next;
   } catch (error) {
@@ -202,7 +221,7 @@ async function handleNewDownload(item) {
     }
 
     try {
-      log("analysis started", downloadId, "Step 1 placeholder");
+      log("analysis started", downloadId, "local heuristics");
       const result = await analyzeDownload(item, settings);
       log("analysis finished", downloadId, `verdict=${result.verdict}, source=${result.source}`);
 
@@ -406,7 +425,11 @@ function buildContext(item) {
 }
 
 /**
- * Simulates asynchronous analysis without applying any security rules.
+ * Runs the local heuristic + scoring analysis for one download.
+ *
+ * Analysis is entirely local: no network request is made and no backend URL is
+ * consulted. The configured delay keeps the download paused long enough for the
+ * heuristics to run, matching the "pauses downloads briefly" product behaviour.
  *
  * @param {chrome.downloads.DownloadItem} item - The download being analyzed.
  * @param {Record<string, unknown>} settings - Current extension settings.
@@ -414,7 +437,7 @@ function buildContext(item) {
  */
 async function analyzeDownload(item, settings) {
   const ctx = buildContext(item);
-      log("analysis delay", item.id, `${DEBUG_ANALYSIS_DELAY_MS}ms`);
+  log("analysis delay", item.id, `${DEBUG_ANALYSIS_DELAY_MS}ms`);
   await new Promise((resolve) => setTimeout(resolve, DEBUG_ANALYSIS_DELAY_MS));
 
   if (DEBUG_FORCE_ERROR) {
@@ -820,10 +843,9 @@ function onMessage(message, sender, sendResponse) {
   return undefined;
 }
 
-// TODO(step 2): decision history + notifications
-// TODO(step 3): redirect tracking + typosquat detection
-// TODO(step 4): heuristics, scoring, and optional backend analysis
-// TODO(step 5): popup, options, and content-script integration
+// TODO(step 3): redirect tracking + typosquat detection. Still outstanding:
+// buildContext() hardcodes redirectChain: [], so the redirect-chain and
+// lookalike-domain heuristics currently always see an empty chain.
 
 // G. Listener registration (must remain synchronous and top-level)
 
@@ -848,6 +870,8 @@ export {
   markPending,
   clearPending,
   pendingKey,
+  getSettings,
+  setSettings,
   getHistory,
   addHistoryEntry,
   clearHistory,
