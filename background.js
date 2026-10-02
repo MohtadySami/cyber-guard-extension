@@ -1,5 +1,5 @@
 import { evaluate } from "./lib/scoring.js";
-import { buildNotificationTitle, buildNotificationMessage } from "./lib/alert.js";
+import { buildNotificationTitle, buildNotificationMessage, buildCompletedNotificationTitle, buildCompletedNotificationMessage } from "./lib/alert.js";
 import { getHostname, resolveFilename } from "./lib/heuristics.js";
 import { getHistory, addHistoryEntry, clearHistory } from "./lib/history.js";
 // A. Constants
@@ -36,6 +36,9 @@ const DECISION_TIMEOUT_MS = 120000;
 const LOG_PREFIX = "[DG]";
 
 const activeResolutions = new Set();
+// Guards against notifying twice about the same download when a state change and
+// an analysis completion both land for it.
+const completedRiskNotified = new Set();
 
 // B. Storage helpers
 
@@ -232,17 +235,38 @@ async function handleNewDownload(item) {
         log("post-analysis search failed", downloadId, searchError?.message || String(searchError));
       }
 
+      const isRisk =
+        result && (result.verdict === "suspicious" || result.verdict === "dangerous");
+
       if (!latestItem || latestItem.state !== "in_progress") {
-        log(
-          "analysis result ignored",
-          downloadId,
-          `state=${latestItem?.state || "not found"}`,
-        );
-        outcome = "ignored";
+        // The download reached a terminal state while we were analysing it.
+        //
+        // A *completed* download can no longer be paused, but the verdict is
+        // still actionable: the bytes are already on disk and
+        // chrome.downloads.removeFile() can delete them. Previously this branch
+        // discarded a risky verdict, which silently left a dangerous file
+        // behind with no warning.
+        //
+        // Cancelled, interrupted and missing downloads stay un-actioned: there
+        // is no completed file to warn about or remove.
+        if (latestItem && latestItem.state === "complete" && isRisk) {          log(
+            "download completed before analysis finished",
+            downloadId,
+            `verdict=${result.verdict}, actioning completed file`,
+          );
+          outcome = await notifyCompletedRisk(latestItem, result);
+        } else {
+          log(
+            "analysis result ignored",
+            downloadId,
+            `state=${latestItem?.state || "not found"}`,
+          );
+          outcome = "ignored";
+        }
         return;
       }
 
-      if (result && (result.verdict === "suspicious" || result.verdict === "dangerous")) {
+      if (isRisk) {
         outcome = await holdDownload(item, result);
       } else {
         outcome = "resumed";
@@ -272,7 +296,9 @@ async function handleNewDownload(item) {
         }
       }
 
-      if (outcome !== "held") {
+      // "held" and "notified" both leave a live pending record that
+      // resolveDecision() still needs in order to act on the user's choice.
+      if (outcome !== "held" && outcome !== "notified") {
         const pendingCleared = await clearPending(downloadId);
         log(
           "pending cleared",
@@ -406,6 +432,142 @@ async function holdDownload(item, result) {
 }
 
 /**
+ * Acts on a risky verdict for a download that finished before analysis could
+ * pause it.
+ *
+ * The download is already complete, so it cannot be paused or cancelled, but the
+ * file is on disk and chrome.downloads.removeFile() can still delete it. This
+ * writes a pending record (so resolveDecision() can act), raises a persistent
+ * notification offering "Delete file" / "Keep file", and applies the same
+ * fail-safe alarm as a held download.
+ *
+ * Never throws. Returns "notified", "already-notified", "cancelled" or "resumed".
+ *
+ * @param {chrome.downloads.DownloadItem} item - The completed download.
+ * @param {{verdict: string, reasons: Array<any>, score?: number, source?: string}} result - The verdict.
+ * @returns {Promise<string>} The outcome.
+ */
+async function notifyCompletedRisk(item, result) {
+  const downloadId = item.id;
+  const verdict = result?.verdict === "dangerous" ? "dangerous" : "suspicious";
+
+  // Requirement: never raise the same notification twice, however many state
+  // changes or analysis completions land for this download.
+  if (completedRiskNotified.has(downloadId)) {
+    log("completed risk already notified", downloadId, `verdict=${verdict}`);
+    return "already-notified";
+  }
+  completedRiskNotified.add(downloadId);
+
+  try {
+    const sourceUrl = item.finalUrl || item.url || "";
+    const host = getHostname(sourceUrl);
+    const ctx = buildContext(item);
+    const filename = resolveFilename(ctx);
+
+    // completedRisk marks the record so onDownloadsChanged() does not tear the
+    // notification down when a later state delta arrives.
+    await chrome.storage.session.set({
+      [pendingKey(downloadId)]: {
+        url: sourceUrl,
+        filename,
+        host,
+        verdict,
+        reasons: result?.reasons,
+        score: result?.score,
+        source: result?.source || "local",
+        startedAt: Date.now(),
+        completedAt: Date.now(),
+        completedRisk: true,
+      },
+    });
+
+    log("completed notification creating", downloadId, `verdict=${verdict}`);
+    let notificationFailed = false;
+    let notificationErrorMsg = null;
+    try {
+      await new Promise((resolve) => {
+        try {
+          chrome.notifications.create(
+            notificationIdForDownload(downloadId),
+            {
+              type: "basic",
+              iconUrl: "icons/icon-128.png",
+              title: buildCompletedNotificationTitle(verdict),
+              message: buildCompletedNotificationMessage(
+                filename,
+                host,
+                result?.reasons || [],
+              ),
+              requireInteraction: true,
+              buttons: [{ title: "Delete file" }, { title: "Keep file" }],
+            },
+            (id) => {
+              if (chrome.runtime.lastError) {
+                resolve({ error: chrome.runtime.lastError.message });
+              } else {
+                resolve({ ok: true, id });
+              }
+            },
+          );
+        } catch (e) {
+          console.error("[DG] completed notification construction/create exception", e);
+          resolve({ error: e?.stack || e?.message || String(e) });
+        }
+      }).then((res) => {
+        if (res && res.error) {
+          notificationFailed = true;
+          notificationErrorMsg = res.error;
+        }
+      });
+    } catch (e) {
+      notificationFailed = true;
+      notificationErrorMsg = e?.message || String(e);
+    }
+
+    if (notificationFailed) {
+      log("completed notification failed", downloadId, notificationErrorMsg || "unknown error");
+    } else {
+      log("completed notification created", downloadId, `verdict=${verdict}`);
+    }
+
+    try {
+      await chrome.alarms.create(alarmNameForDownload(downloadId), {
+        delayInMinutes: DECISION_TIMEOUT_MS / 60000,
+      });
+      log("alarm set", downloadId, `dg-timeout-${downloadId} in ${DECISION_TIMEOUT_MS}ms`);
+    } catch (alarmErr) {
+      log("alarm create failed", downloadId, alarmErr?.message || String(alarmErr));
+    }
+
+    if (notificationFailed) {
+      // Fail safe without ever having asked the user: remove a dangerous file,
+      // but keep a merely suspicious one rather than deleting silently.
+      if (verdict === "dangerous") {
+        await resolveDecision(downloadId, "cancel", "notification-failed");
+        return "cancelled";
+      }
+      await resolveDecision(downloadId, "allow", "notification-failed");
+      return "resumed";
+    }
+    return "notified";
+  } catch (e) {
+    log("notifyCompletedRisk error", downloadId, e?.message || String(e));
+    try {
+      if (verdict === "dangerous") {
+        await resolveDecision(downloadId, "cancel", "hold-error");
+        return "cancelled";
+      }
+      await resolveDecision(downloadId, "allow", "hold-error");
+      return "resumed";
+    } catch (e2) {
+      log("notifyCompletedRisk fallback failed", downloadId, e2?.message || String(e2));
+      return "resumed";
+    }
+  }
+}
+
+/**
  * Builds a minimal context object from the DownloadItem.
  *
  * @param {chrome.downloads.DownloadItem} item - The download being analyzed.
@@ -515,11 +677,16 @@ async function recoverPendingDownloads(trigger) {
   const pendingDownloads = await getAllPending();
 
   for (const { id: downloadId, data } of pendingDownloads) {
-    // A held download has a verdict stored in its session entry. The notification
-    // and alarm were created before the restart and are still live. Leave the
-    // session entry intact so resolveDecision() can still act on button/timeout.
+    // A held download, or a completed download already flagged to the user, has
+    // a verdict stored in its session entry. The notification and alarm were
+    // created before the restart and are still live. Leave the session entry
+    // intact so resolveDecision() can still act on button/timeout.
     if (data && typeof data.verdict === "string" && data.verdict) {
-      log("recovery skipped (held)", downloadId, `verdict=${data.verdict}`);
+      log(
+        "recovery skipped (awaiting decision)",
+        downloadId,
+        `verdict=${data.verdict}${data.completedRisk ? ", completed" : ""}`,
+      );
       continue;
     }
 
@@ -618,16 +785,29 @@ async function onDownloadsChanged(downloadDelta) {
     return;
   }
   const key = pendingKey(downloadId);
-  let hasPending = false;
+  let pending = null;
   try {
     const data = await chrome.storage.session.get(key);
-    hasPending = !!(data && data[key]);
+    pending = data && data[key] ? data[key] : null;
   } catch (_e) {
     // ignore
   }
-  if (!hasPending) {
+  if (!pending) {
     return;
   }
+
+  // A completed download we already flagged is awaiting the user's answer on a
+  // notification and alarm that are still live. A repeated state delta must not
+  // tear them down, and must not record a duplicate decision.
+  if (pending.completedRisk === true) {
+    log(
+      "external state change ignored (awaiting decision)",
+      downloadId,
+      `state=${downloadDelta.state?.current || "n/a"}`,
+    );
+    return;
+  }
+
   if (downloadDelta.state && downloadDelta.state.current !== "in_progress") {
     // Download ended externally (e.g., user cancelled via Chrome download bar).
     // Clean up the associated UI and session state. resolveDecision() is not
@@ -695,14 +875,37 @@ async function resolveDecision(downloadId, action, cause) {
     }
 
     if (action === "allow") {
+      let allowSucceeded = false;
+      let allowError = null;
       try {
         await chrome.downloads.resume(downloadId);
-        log("decision allow", downloadId, cause);
+        allowSucceeded = true;
       } catch (resumeError) {
-        log("decision allow resume failed", downloadId, resumeError?.message || String(resumeError));
-        activeResolutions.delete(downloadId);
-        return { ok: false, error: resumeError?.message || String(resumeError) };
+        allowError = resumeError;
+        // A download that already completed cannot be resumed. For "allow" that
+        // is the desired end state (keep the finished file), not a failure, so
+        // confirm the download is terminal and carry on to record the decision.
+        let item;
+        try {
+          [item] = await chrome.downloads.search({ id: downloadId });
+        } catch (_sErr) {
+          // ignore
+        }
+        if (item && item.state !== "in_progress") {
+          allowSucceeded = true;
+          log("decision allow (already finished)", downloadId, `state=${item.state}`);
+        }
       }
+      if (!allowSucceeded) {
+        log(
+          "decision allow resume failed",
+          downloadId,
+          allowError?.message || String(allowError),
+        );
+        activeResolutions.delete(downloadId);
+        return { ok: false, error: allowError?.message || String(allowError) };
+      }
+      log("decision allow", downloadId, cause);
     } else if (action === "cancel") {
       let cancelSuccess = false;
       try {
@@ -863,6 +1066,8 @@ void recoverPendingDownloads("worker startup");
 export {
   handleNewDownload,
   holdDownload,
+  notifyCompletedRisk,
+  completedRiskNotified,
   resolveDecision,
   activeResolutions,
   recoverPendingDownloads,

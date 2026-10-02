@@ -25,6 +25,30 @@ locally in the browser — no network request is made and no data is uploaded.**
    `notification-closed`, `notification-failed`, `hold-error`) is recorded in persistent
    history and shown in the popup.
 
+### Downloads that finish before the check
+
+A very small file can finish downloading inside the analysis window, before Cyber Guard can
+pause it. If its verdict is `suspicious` or `dangerous`, the extension does **not** discard
+the result. Because the file is already on disk, `chrome.downloads.removeFile()` can still
+delete it, so the extension raises a distinct notification:
+
+> **Suspicious file already downloaded** / **Dangerous file already downloaded**
+> This file finished downloading before Cyber Guard could pause it.
+> …Choose **Delete file** to remove it from disk, or **Keep file** to allow it.
+
+The same 120-second fail-safe alarm applies, and the outcome is recorded in history with the
+normal causes. The completed-file notification is emitted at most once per download, and a
+later state change will not tear it down while you are deciding.
+
+- **Delete file** removes the file from disk (`removeFile`) and erases the download entry.
+- **Keep file** leaves it in place and just records the decision.
+
+Cancelled, interrupted and not-found downloads are still left alone, because there is no
+completed file to warn about or remove.
+
+If the notification cannot be created at all, the extension fails safe: a **dangerous** file
+is deleted, while a merely **suspicious** one is kept rather than deleted without consent.
+
 ### Heuristics
 
 `lib/heuristics.js` contributes scored signals including double extensions
@@ -69,7 +93,7 @@ background.js          Service worker: download lifecycle, hold/resume, timeout,
 popup.html / .css / .js  Popup UI
 lib/heuristics.js      Signal detection
 lib/scoring.js         Score aggregation and verdict thresholds
-lib/alert.js           Notification title and message builders
+lib/alert.js           Notification title and message builders (held and completed-file variants)
 lib/history.js         Persistent decision history (serialized write queue, capped at 100)
 lib/popup-core.js      DOM-free popup helpers (single-send messaging, history row rendering)
 ```
@@ -107,14 +131,23 @@ npx eslint .
    `too late to pause` / `skipped (already finished)`; no crash and no pending record remains.
 6. **External cancellation:** Start a download and cancel it during the pause. Expected:
    `external state change` then `external cleanup done`; no notification or alarm is left behind.
-7. **Concurrent downloads:** Start three downloads before the first analysis completes.
+7. **File too small to pause (the reported bug):** Download a tiny file with a risky name, such
+   as `eicar.com` over `http://`. It finishes inside the 2s analysis window. Expected:
+   `download completed before analysis finished`, then a **Suspicious file already downloaded**
+   notification with **Delete file** / **Keep file**, and an `alarm set` line. Nothing is
+   resumed or cancelled. Choose **Delete file** and confirm the file is gone from disk and the
+   entry appears in the popup history; repeat and choose **Keep file** to confirm it stays.
+8. **No duplicate notification:** With the completed-file notification still on screen, wait for
+   further download activity. Only one notification should exist and only one history entry
+   should be written for that download.
+9. **Concurrent downloads:** Start three downloads before the first analysis completes.
    Expected: each download ID has separate `[DG]` logs and all three finish.
-8. **Worker restart recovery:** Start a sufficiently large download, wait until it logs
+10. **Worker restart recovery:** Start a sufficiently large download, wait until it logs
    `paused`, then stop the service worker from its DevTools/Application tools. Wake it with
    another download. Expected: startup recovery resumes the paused download and clears its
-   `pending:<id>` record. A download that was already *held* is left alone so its live
-   notification and alarm keep working.
-9. **Disabled setting:** In the service-worker console, run:
+   `pending:<id>` record. A download that was already *held*, or that finished and is awaiting
+   a decision, is left alone so its live notification and alarm keep working.
+11. **Disabled setting:** In the service-worker console, run:
 
    ```js
    await chrome.runtime.sendMessage({
