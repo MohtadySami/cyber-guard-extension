@@ -1,50 +1,58 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="en" dir="ltr">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Cyber Guard</title>
+  <title>Cyber Guard: Download Security Assistant</title>
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
-  <div class="container">
+  <div class="container" id="container">
     <header class="header">
-      <div class="logo-title">
-        <span class="shield-icon">🛡️</span>
-        <h2>Cyber Guard</h2>
+      <div class="brand">
+        <span class="radar-slot" id="radar"></span>
+        <h2><span data-i18n="extShortName">Cyber Guard</span></h2>
       </div>
-      <div class="status-badge active" id="statusBadge">
-        <span class="status-dot"></span>
-        <span id="statusText">حماية نشطة</span>
-       
+      <div class="status-badge" id="statusBadge" data-state="secure">
+        <span class="status-dot" aria-hidden="true"></span>
+        <span id="statusText">Active Protection</span>
       </div>
     </header>
 
     <section class="card">
-      <div class="card-title">⚙️ الإعدادات</div>
+      <div class="card-title"><span aria-hidden="true">⚙️</span> <span data-i18n="settingsTitle">Settings</span></div>
       <div class="setting-row">
-        <label for="sensitivitySelect" class="setting-label">حساسية الكشف</label>
+        <label for="sensitivitySelect" class="setting-label" data-i18n="sensitivityLabel">Detection sensitivity</label>
         <select id="sensitivitySelect">
-          <option value="low">منخفضة</option>
-          <option value="medium">متوسطة</option>
-          <option value="high">مرتفعة</option>
+          <option value="low" data-i18n="sensitivityLow">Low</option>
+          <option value="medium" data-i18n="sensitivityMedium">Medium</option>
+          <option value="high" data-i18n="sensitivityHigh">High</option>
         </select>
       </div>
       <div class="setting-row">
-        <label for="enabledToggle" class="setting-label">تفعيل الحماية</label>
+        <label for="languageSelect" class="setting-label" data-i18n="languageLabel">Interface language</label>
+        <select id="languageSelect"></select>
+      </div>
+      <div class="setting-row">
+        <label for="enabledToggle" class="setting-label" data-i18n="enableLabel">Enable protection</label>
         <input type="checkbox" id="enabledToggle" />
       </div>
-      <div class="button-group">
-        <button id="saveBtn">حفظ</button>
-        <button id="clearHistoryBtn">مسح السجل</button>
+      <div class="setting-row">
+        <label for="pageAlertsToggle" class="setting-label" data-i18n="pageAlertLabel">Show threat alert on the page</label>
+        <input type="checkbox" id="pageAlertsToggle" />
       </div>
-      <p id="msgText" class="msg-text"></p>
+      <p class="hint" id="pageAlertHint" data-i18n="pageAlertLabelHint"></p>
+      <div class="button-group">
+        <button id="saveBtn" data-i18n="save">Save</button>
+        <button id="clearHistoryBtn" data-i18n="clearHistory">Clear history</button>
+      </div>
+      <p id="msgText" class="msg-text" role="status" aria-live="polite"></p>
     </section>
 
     <section class="card">
-      <div class="card-title">📜 سجل الفحص الأخير</div>
+      <div class="card-title"><span aria-hidden="true">📜</span> <span data-i18n="historyTitle">Recent checks</span></div>
       <ul class="logs-list" id="logsList">
-        <li class="log-item empty">لا توجد عمليات فحص حالية</li>
+        <li class="log-item empty">No checks yet</li>
       </ul>
     </section>
   </div>

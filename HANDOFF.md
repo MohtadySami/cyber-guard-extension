@@ -1,10 +1,188 @@
-# Cyber Guard v0.1.0 — Partner Handoff Report
+# Cyber Guard — Partner Handoff Report
 
-**Prepared:** 2026-10-02
-**Revision:** 3 — completed-but-risky downloads are now actioned
-**Status:** PR #1 open, not merged. Nothing published to the Chrome Web Store.
+**Prepared:** 2026-10-05
+**Revision:** 5 — four languages, Closed Radar rebrand, threat states, provider abstraction, page alert
+**Status:** PR #1 open, not merged. Nothing published to the Chrome Web Store. **No release ZIP built for this revision — awaiting review.**
 
 ---
+
+## 0. Revision 5 — 0.2.0 feature expansion
+
+### What shipped
+
+| Area | Change |
+|---|---|
+| Localization | `_locales/{en,ar,es,fr}/messages.json` (69 keys each) + runtime resolver in `lib/i18n.js`. **English is the new default**; existing stored preferences are preserved. |
+| Manifest | `default_locale`, `__MSG_*__` name/description, version `0.2.0`, two **optional** permissions |
+| Brand | Closed Radar: new `icons/radar.svg` + regenerated 16/48/128 PNGs, new palette, system font stack |
+| Popup | Radar logo with secure / analyzing / threat states, red threat badges, `prefers-reduced-motion` guards |
+| Threat layer | `lib/threat/provider.js` + `lib/threat/engine.js`: provider interface, `NullProvider`, `LocalProvider`, threat-state machine. **No HTTP provider.** |
+| Page alert | `lib/page-alert.js`: one-shot `chrome.scripting.executeScript()` injection into the originating tab, closed shadow root, opt-in permission |
+
+### Language architecture and the one honest compromise
+
+`chrome.i18n.getMessage()` resolves against the **browser UI locale** and has no API for
+requesting a specific language ([crbug/660704](https://github.com/w3c/webextensions/issues/252),
+still open). It therefore cannot drive a runtime language selector.
+
+The hybrid adopted here:
+
+- **Native `_locales` + `__MSG_*__` + `default_locale: "en"`** serve every Chrome-controlled
+  surface — the manifest name/description, the browser UI, and the store listing.
+- **`lib/i18n.js` resolves the same catalogues at runtime**, reading
+  `_locales/<lang>/messages.json` through `chrome.runtime.getURL()` and passing the stored
+  preference explicitly. This is what makes the runtime selector work.
+
+The two `fetch()` calls in the codebase read only Cyber Guard's own packaged files. There is no
+network access.
+
+Consequence to be aware of: adding a language means adding a `_locales` folder and one entry in
+`SUPPORTED_LANGUAGES`. Chrome's own UI chrome follows the *browser* locale, not the in-app
+selection — that is a browser limitation, not a bug in this implementation.
+
+### The default-language change is a real data change
+
+0.2.0 defaults to English (the 0.1.x default was Arabic). This is deliberate and matches the
+store-facing decision to make English primary, but reviewers should understand:
+
+- Users on **0.1.x stored an explicit `language`**, so **their choice is preserved**. An Arabic
+  user stays on Arabic.
+- Only installs with **no stored value** — i.e. pre-localization builds, and fresh installs —
+  pick up English.
+
+There is no migration and nothing is rewritten.
+
+### Threat-intelligence layer: interface only, no provider
+
+```
+lib/heuristics.js ──► reasons ──► lib/scoring.js ──► local verdict
+                                                     │
+lib/threat/provider.js  ◄── interface ──►  NullProvider    (always unavailable)
+                       │                  LocalProvider   (restates the local verdict)
+                       └────────────────►  HttpProvider    (NOT implemented)
+
+lib/threat/engine.js ──► threat state for the UI
+```
+
+**Security invariant: a provider can never change a decision.** `finalVerdict` comes from the
+local verdict alone. A `malicious` provider cannot escalate a locally-safe download; a `safe`
+provider cannot downgrade a locally-dangerous one. Failure modes — unavailable, throwing,
+timing out (1.5 s guard), malformed payload — all normalize to `unavailable` and yield exactly
+the local-only assessment. Each is covered by a test.
+
+**No VirusTotal integration, deliberately.** Their public API must not be used in commercial
+products (500 req/day, 4/min, permanent ban for non-compliance); only the paid Private API
+permits commercial use; and any key embedded in an extension is exposed to every user. Any future
+integration must go through a backend proxy holding the credential, with its own privacy
+disclosure. Cyber Guard sends **no file, URL or hash to any third party**, and no API key exists
+anywhere in the repository.
+
+### Page alert: one-shot injection, not a resident content script
+
+At the moment a **dangerous** verdict is reached, `chrome.scripting.executeScript()` injects a
+self-contained renderer into that one tab. There is **no registered content script** and nothing
+runs on any page until a threat occurs.
+
+- `world: "ISOLATED"` — the function cannot reach extension APIs; the page cannot reach it.
+- **Closed shadow root** — page CSS cannot restyle the alert; page JS cannot read it.
+  *(Verified in a real browser against a page using hostile `* { color: red !important }`.)*
+- `pointer-events: none` on the container — the page stays fully usable. **No blocking overlay.**
+- Carries only verdict, file name and reason. No URL, no page content, no browsing history.
+- `role="alert"`, `aria-live="assertive"`, `dir`/`lang` set for Arabic, motion respects
+  `prefers-reduced-motion`.
+
+### Files changed in revision 5
+
+| File | Change |
+|---|---|
+| `_locales/{en,ar,es,fr}/messages.json` | **New.** 69 keys × 4 languages, Chrome-valid catalogues |
+| `lib/i18n.js` | Rewritten as a catalogue resolver; API preserved; `DEFAULT_LANGUAGE` → `en` |
+| `lib/threat/provider.js` | **New.** Provider interface, normalization, null + local providers |
+| `lib/threat/engine.js` | **New.** Threat state machine with the provider-invariance guarantee |
+| `lib/page-alert.js` | **New.** Gating, localized payload, self-contained injected renderer |
+| `lib/i18n.test.js`, `lib/localization.test.js`, `lib/threat/engine.test.js`, `lib/page-alert.test.js` | **New.** 109 tests |
+| `lib/test-i18n-fixture.js` | **New.** Loads the real shipped catalogues for tests |
+| `lib/alert.js` | Localized labels from the catalogue |
+| `lib/popup-core.js` | Localized verdict/decision labels; `pageAlerts` in the settings patch |
+| `lib/heuristics.js`, `lib/scoring.js` | **Unchanged in 0.2.0** (already carried `params` in 0.1.1) |
+| `background.js` | Catalogue loading, threat assessment, page-alert trigger, two new messages |
+| `popup.{html,css,js}` | Radar logo, three states, language + page-alert controls |
+| `manifest.json` | `0.2.0`, `default_locale`, `__MSG_*__`, optional permissions |
+| `icons/radar.svg`, `icons/icon-{16,48,128}.png` | **New/regenerated** Closed Radar identity |
+| `README.md`, `HANDOFF.md`, `PROJECT_REPORT.md` | Updated |
+
+### What was deliberately NOT done
+
+No HTTP provider, no API key, no file/URL upload. No `<all_urls>`. No new **required**
+permission. No scoring, weight, threshold, timeout or decision-semantics change. No history
+migration. No registered content script. No Git commit, push, merge, publish, or release ZIP.
+
+### How to test this revision manually
+
+1. `chrome://extensions` → **Reload**. Open the popup.
+2. Confirm **English / LTR** on a fresh profile, with the radar in the **secure** state.
+3. Switch to **Arabic** — RTL, Arabic labels; then **Spanish** and **French** — LTR, translated.
+   Close and reopen the popup: the choice persists.
+4. Seed history from DevTools (`chrome.storage.local`) with a `dangerous` and a `safe` entry;
+   confirm badges, decisions and dates render in each language.
+5. Download `invoice.pdf.exe` slowly from a local server. Confirm the notification language
+   matches the popup, and that button 0 = Cancel and button 1 = Allow.
+6. Download a small risky file that finishes inside the 2 s window; confirm the completed-risk
+   notification and Delete/Keep labels.
+7. Press the buttons; confirm cancel/allow and delete/keep still behave exactly as in 0.1.x.
+8. Toggle **Show threat alert on the page** and grant the prompt. Repeat step 5 from a real web
+   page. Confirm the vignette + alert box appear **only for a dangerous verdict**, that the page
+   stays usable, and that Arabic renders RTL.
+9. Deny the permission instead: confirm no alert is injected and the popup explains why.
+10. Set sensitivity high, switch language, and confirm sensitivity and the enable toggle survive.
+
+### Verified in a real Chrome session
+
+Chrome for Testing 154.0.8037.92, unpacked, driven over the DevTools Protocol against real
+downloads from local HTTP servers (throttled for the held path, instant for the completed path),
+plus a local page with deliberately hostile global CSS.
+
+| Check | Result |
+|---|---|
+| Manifest name / description resolve from `_locales` | pass — *Cyber Guard: Download Threat Protection* |
+| Fresh install is English / LTR | pass |
+| Arabic / RTL, Spanish / LTR, French / LTR all render translated | pass |
+| Language persists across popup reopen | pass |
+| Language names in the selector render in the active language | pass (fixed a cold-open ordering bug) |
+| History renders in all four languages, canonical values unchanged | pass |
+| Secure / analyzing / threat states render distinct colours and animations | pass |
+| Threat state only for a `dangerous` verdict | pass |
+| `prefers-reduced-motion` guards present and honoured | pass |
+| Held-risk notification localized in all four languages | pass |
+| Completed-risk notification + Delete/Keep localized (en, ar) | pass |
+| `GET_THREAT_STATE` returns threat / verdict / score | pass |
+| Page alert suppressed when permission not granted | pass (fail-safe) |
+| Page alert renders: vignette + centered box, ⚠️, file, reason, Dismiss | pass (screenshot) |
+| Hostile page CSS does not reach the alert | pass (screenshot) |
+| Page JS cannot read the alert (closed shadow root) | pass |
+| `chrome.*` not visible to the injected function | pass |
+| Page remains interactive (`pointer-events: none` container) | pass |
+| Arabic alert renders RTL with the icon on the right | pass (screenshot) |
+
+**One real bug was found and fixed during this testing:** the renderer initially appended its
+elements to the host's **light DOM** instead of into the shadow root, which left the closed root
+empty and would have let page CSS restyle the alert. Caught by screenshot inspection, fixed, and
+re-verified.
+
+### Revision 5 results
+
+```
+node --test                -> 257 pass / 0 fail / 0 skipped
+node --check (22 .js)      -> exit 0 for every file
+npx eslint .               -> NOT RUN, no result claimed (see below)
+```
+
+**Linting: still not reproducible.** `eslint.config.js` exists, but `eslint` is not declared in
+`package.json`, has no lockfile, and is not installed; `npx eslint .` attempts a network install
+and does not complete. No lint result is claimed.
+
+---
+
 
 ## 0. Revision 3 — completed-but-risky downloads are no longer discarded
 
@@ -251,18 +429,34 @@ All local heuristics are untouched and still fully functional.
 
 ## 4. Tests and lint — actual results
 
+Revision 4 results (Node.js v26.7.0):
+
 ```
-node --test                  -> 144 pass / 0 fail / 0 skipped   (exit 0)
-node --check background.js   -> exit 0
-node --check popup.js        -> exit 0
-node --check lib/popup-core.js -> exit 0   (+ alert, heuristics, history, scoring all exit 0)
-npx eslint .                 -> exit 0, no findings
-npx eslint background.js     -> exit 0
+node --test                  -> 181 pass / 0 fail / 0 skipped
+node --check <all 20 .js>    -> exit 0 for every file
+npx eslint .                 -> NOT RUN, no result claimed (see below)
 ```
 
-Test count: 100 (original) → 128 (revision 2) → **144 (revision 3)**.
-Every packaged `.js` was additionally extracted to a temp directory and re-checked with
-`node --check`.
+Test count: 100 (original) → 128 (revision 2) → 144 (revision 3) → **181 (revision 4)**.
+
+**Revision 3 results are retained below unchanged.** Note that the ESLint lines quoted there
+were produced on the audit machine, where the dependencies happened to be present; they are
+**not reproducible from this checkout** and are not re-verified here.
+
+### Lint — no result claimed for revision 4
+
+`eslint.config.js` is present, but `eslint` itself is not declared in `package.json`, has no
+lockfile, and is not installed in `node_modules` (only the `@eslint` and `globals` config
+packages are). `npx eslint .` attempts a network install and does not complete. **No lint
+result is claimed for revision 4.** Installing ESLint and pinning it in `package.json` remains
+open work.
+
+### Localization regression tests added
+
+| File | Guards |
+|---|---|
+| `lib/i18n.test.js` | **New in revision 4 (17 tests).** Arabic default, normalization and every fallback path, key resolution, missing-key fallback, interpolation, RTL/LTR, locales, reason localization by code, complete reason-code coverage, notification button labels and index order |
+| `lib/localization.test.js` | **New in revision 4 (20 tests).** Settings persistence and invalid-value repair, language switches preserving other settings, localized held/completed notification titles, messages, reasons and buttons, history in both languages, and — critically — that language does **not** change scores, thresholds, or heuristic weights |
 
 ### Regression tests added
 
@@ -297,27 +491,33 @@ Each injection was then reverted and the suite returned to green.
 
 ## 5. Release package
 
-Rebuilt for revision 3, because `background.js`, `lib/alert.js` and `README.md` changed.
+Rebuilt for revision 4.
+
+**Version decision: 0.1.1, not 0.1.0.** Language selection is a new user-facing feature with
+a new persisted setting. Shipping it inside the already-audited 0.1.0 artifact would
+invalidate that audit's recorded hash and make the released bundle no longer match the
+documented build, so the version was bumped and a new package produced.
 
 | Item | Value |
 |---|---|
-| Path | `C:\Users\User\cyber-guard-extension\cyber-guard-v0.1.0.zip` |
-| Size | **26,574 bytes** |
-| Entries | 13, `manifest.json` at ZIP root, no unexpected directories |
-| Every packaged file vs final source | **13/13 byte-for-byte MATCH** |
+| Path | `C:\Users\User\cyber-guard-extension\cyber-guard-v0.1.1.zip` |
+| Size | **33,307 bytes** |
+| Entries | 14, `manifest.json` at ZIP root, no unexpected directories |
+| Every packaged file vs final source | **14/14 byte-for-byte MATCH** |
 | Forbidden content (tests, dev deps, docs, secrets) | none |
 | `fetch` / `XMLHttpRequest` / `WebSocket` / `host_permissions` in package | **none** |
 
-### NEW release hash
+### NEW release hash (revision 4 / v0.1.1)
 
 ```
-CC9EFF42898513294F139D6652A60593033C00394DD6CBFD19928D0699A99C65
+508A72DBEECA59D105746FD7C14A32312D971569B3C6898F16CD6D54B37C4521
 ```
 
 ### Superseded hashes — kept for reference only, do NOT upload
 
 | Revision | File | Size | SHA-256 | Tracked? |
 |---|---|---|---|---|
+| rev 3 | `cyber-guard-v0.1.0-SUPERSEDED-CC9EFF42.zip` | 26,574 B | `CC9EFF42898513294F139D6652A60593033C00394DD6CBFD19928D0699A99C65` | untracked; byte-identical to the rev 3 build at `2564bb9` |
 | rev 2 | `cyber-guard-v0.1.0-SUPERSEDED-925391CF.zip` | 24,696 B | `925391CF038430DCA617884EA5FE97AC34DBDFEAA336BD54ECEB72B8A3D219B3` | untracked |
 | rev 1 | `cyber-guard-v0.1.0-SUPERSEDED-430F8F6E.zip` | 23,015 B | `430F8F6EBBAE8BC7DEBC441C6EA698B96058DAAAC2A6E2FCC43DCF1E6EA1CDB4` | **committed at `66eea2e`** |
 
@@ -331,13 +531,14 @@ preserved byte-identical for audit. Note that `cyber-guard-v0.1.0.zip` at `66eea
 ```
 manifest.json        background.js     popup.html   popup.css   popup.js
 lib/alert.js         lib/heuristics.js lib/history.js
-lib/popup-core.js    lib/scoring.js
+lib/i18n.js          lib/popup-core.js lib/scoring.js
 icons/icon-16.png    icons/icon-48.png icons/icon-128.png
 ```
 
-`lib/popup-core.js` is a genuine runtime dependency of `popup.js`. Walking the ES import
-closure from both entry points (`background.js`, `popup.js`) reaches all **7** packaged JS
-modules with **no unresolved imports** and **no packaged-but-unreachable** JS.
+Walking the ES import closure from both entry points (`background.js`, `popup.js`) reaches all
+**8** packaged JS modules with **no unresolved imports** and **no packaged-but-unreachable**
+JS. `lib/i18n.js` is a genuine runtime dependency of `background.js`, `popup.js`,
+`lib/alert.js`, and `lib/popup-core.js`, so it must ship in the package.
 
 Verification also extracted the ZIP to a temp directory and confirmed the packaged
 `manifest.json` parses (`host_permissions` absent), every packaged `.js` passes

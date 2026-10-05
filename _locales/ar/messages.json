@@ -1,0 +1,327 @@
+{
+  "alertBody": {
+    "message": "أوقف Cyber Guard وحظر تنزيلًا خطرًا من هذه الصفحة."
+  },
+  "alertBodyDangerous": {
+    "message": "أوقف Cyber Guard وحظر تنزيلًا خطرًا من هذه الصفحة."
+  },
+  "alertBodySafe": {
+    "message": "فحص Cyber Guard هذا التنزيل ولم يعثر على مؤشرات تهديد."
+  },
+  "alertBodySuspicious": {
+    "message": "رصد Cyber Guard إشارات مخاطر محتملة لهذا التنزيل."
+  },
+  "alertDismiss": {
+    "message": "إغلاق"
+  },
+  "alertFilename": {
+    "message": "الملف"
+  },
+  "alertHeadline": {
+    "message": "تم رصد تهديد خطير"
+  },
+  "alertHeadlineDangerous": {
+    "message": "تم رصد تهديد خطير"
+  },
+  "alertHeadlineSafe": {
+    "message": "التنزيل يبدو آمنًا"
+  },
+  "alertHeadlineSuspicious": {
+    "message": "تم رصد تنزيل مشكوك فيه"
+  },
+  "btnAllowAnyway": {
+    "message": "السماح على أي حال"
+  },
+  "btnCancelDownload": {
+    "message": "إلغاء التنزيل"
+  },
+  "btnDeleteFile": {
+    "message": "حذف الملف"
+  },
+  "btnKeepFile": {
+    "message": "الاحتفاظ بالملف"
+  },
+  "clearHistory": {
+    "message": "مسح السجل"
+  },
+  "decisionAllow": {
+    "message": "تم السماح"
+  },
+  "decisionCancel": {
+    "message": "تم الإلغاء"
+  },
+  "decisionDelete": {
+    "message": "تم حذف الملف"
+  },
+  "decisionKeep": {
+    "message": "تم الاحتفاظ بالملف"
+  },
+  "decisionPrefix": {
+    "message": "القرار"
+  },
+  "enableLabel": {
+    "message": "تفعيل الحماية"
+  },
+  "extDescription": {
+    "message": "يوقف التنزيلات مؤقتًا للتحقق من اسم الملف والمصدر والنوع."
+  },
+  "extName": {
+    "message": "Cyber Guard: مساعد أمان التنزيل"
+  },
+  "extShortName": {
+    "message": "Cyber Guard: مساعد أمان التنزيل"
+  },
+  "historyTitle": {
+    "message": "الفحوص الأخيرة"
+  },
+  "languageLabel": {
+    "message": "لغة الواجهة"
+  },
+  "languageOptionAr": {
+    "message": "العربية"
+  },
+  "languageOptionEn": {
+    "message": "الإنجليزية"
+  },
+  "languageOptionEs": {
+    "message": "الإسبانية"
+  },
+  "languageOptionFr": {
+    "message": "الفرنسية"
+  },
+  "loadError": {
+    "message": "تعذر تحميل الإعدادات"
+  },
+  "noHistory": {
+    "message": "لا توجد فحوص بعد"
+  },
+  "notifCompletedActionHint": {
+    "message": "اختر \"حذف الملف\" لإزالته من القرص، أو \"الاحتفاظ بالملف\" للسماح به."
+  },
+  "notifCompletedIntro": {
+    "message": "انتهى تنزيل هذا الملف قبل أن تتمكن Cyber Guard من إيقافه مؤقتًا."
+  },
+  "notifFile": {
+    "message": "الملف"
+  },
+  "notifSource": {
+    "message": "المصدر"
+  },
+  "notifyCompletedDangerousTitle": {
+    "message": "ملف خطير تم تنزيله بالفعل"
+  },
+  "notifyCompletedSuspiciousTitle": {
+    "message": "ملف مشكوك فيه تم تنزيله بالفعل"
+  },
+  "notifyDangerousTitle": {
+    "message": "تنزيل خطير"
+  },
+  "notifySuspiciousTitle": {
+    "message": "تنزيل مشكوك فيه"
+  },
+  "pageAlertLabel": {
+    "message": "إظهار تنبيه التهديد في الصفحة"
+  },
+  "pageAlertLabelHint": {
+    "message": "اختياري. يمنح Cyber Guard صلاحية تنبيهك في الصفحة التي جاء منها التنزيل الخطر."
+  },
+  "pageAlertPermissionDenied": {
+    "message": "تم رفض الإذن — تبقى تنبيهات الصفحة متوقفة."
+  },
+  "providerUnavailableLabel": {
+    "message": "تعذر الوصول لمعلومات التهديدات — يتم استخدام الفحوص المحلية فقط"
+  },
+  "reasonContainerExtension": {
+    "message": "اسم الملف $FILENAME$ يستخدم امتداد حاوية .$EXTENSION$",
+    "placeholders": {
+      "EXTENSION": {
+        "content": "$2"
+      },
+      "FILENAME": {
+        "content": "$1"
+      }
+    }
+  },
+  "reasonDoubleExtension": {
+    "message": "اسم الملف $FILENAME$ يستخدم امتدادًا مزدوجًا (.$PREVIOUSEXTENSION$.$LASTEXTENSION$)",
+    "placeholders": {
+      "FILENAME": {
+        "content": "$1"
+      },
+      "LASTEXTENSION": {
+        "content": "$4"
+      },
+      "PREVIOUSEXTENSION": {
+        "content": "$3"
+      }
+    }
+  },
+  "reasonExecutableExtension": {
+    "message": "اسم الملف $FILENAME$ يستخدم امتداد ملف تنفيذي .$EXTENSION$",
+    "placeholders": {
+      "EXTENSION": {
+        "content": "$2"
+      },
+      "FILENAME": {
+        "content": "$1"
+      }
+    }
+  },
+  "reasonInsecureHttp": {
+    "message": "رابط التنزيل $URL$ يستخدم HTTP غير آمن",
+    "placeholders": {
+      "URL": {
+        "content": "$6"
+      }
+    }
+  },
+  "reasonIpHost": {
+    "message": "مضيف التنزيل $HOSTNAME$ هو عنوان IP",
+    "placeholders": {
+      "HOSTNAME": {
+        "content": "$7"
+      }
+    }
+  },
+  "reasonLongRedirectChain": {
+    "message": "سلك التنزيل سلسلة إعادة توجيه من $HOPS$ قفزات",
+    "placeholders": {
+      "HOPS": {
+        "content": "$10"
+      }
+    }
+  },
+  "reasonMacroDocument": {
+    "message": "اسم الملف $FILENAME$ مستند يدعم الماكرو (.$EXTENSION$)",
+    "placeholders": {
+      "EXTENSION": {
+        "content": "$2"
+      },
+      "FILENAME": {
+        "content": "$1"
+      }
+    }
+  },
+  "reasonMimeMismatch": {
+    "message": "اسم الملف $FILENAME$ يستخدم امتداد مستند/وسائط .$EXTENSION$ لكن نوع MIME هو $MIME$",
+    "placeholders": {
+      "EXTENSION": {
+        "content": "$2"
+      },
+      "FILENAME": {
+        "content": "$1"
+      },
+      "MIME": {
+        "content": "$5"
+      }
+    }
+  },
+  "reasonPunycodeHost": {
+    "message": "مضيف التنزيل $HOSTNAME$ يحتوي على تسمية punycode $PUNYLABEL$",
+    "placeholders": {
+      "HOSTNAME": {
+        "content": "$7"
+      },
+      "PUNYLABEL": {
+        "content": "$9"
+      }
+    }
+  },
+  "reasonRtloCharacter": {
+    "message": "اسم الملف $FILENAME$ يحتوي على محرف تحكم ثنائي الاتجاه",
+    "placeholders": {
+      "FILENAME": {
+        "content": "$1"
+      }
+    }
+  },
+  "reasonScriptExtension": {
+    "message": "اسم الملف $FILENAME$ يستخدم امتداد سكربت .$EXTENSION$",
+    "placeholders": {
+      "EXTENSION": {
+        "content": "$2"
+      },
+      "FILENAME": {
+        "content": "$1"
+      }
+    }
+  },
+  "reasonSuspiciousTld": {
+    "message": "مضيف التنزيل $HOSTNAME$ يستخدم نطاقًا مشبوهًا .$TLD$",
+    "placeholders": {
+      "HOSTNAME": {
+        "content": "$7"
+      },
+      "TLD": {
+        "content": "$8"
+      }
+    }
+  },
+  "reasonTrailingSpacesOrDots": {
+    "message": "اسم الملف $FILENAME$ يحتوي على مسافات أو نقاط مضللة قبل الامتداد",
+    "placeholders": {
+      "FILENAME": {
+        "content": "$1"
+      }
+    }
+  },
+  "reasonTrustedDomain": {
+    "message": "مضيف المصدر $HOSTNAME$ موثوق",
+    "placeholders": {
+      "HOSTNAME": {
+        "content": "$7"
+      }
+    }
+  },
+  "save": {
+    "message": "حفظ"
+  },
+  "saveError": {
+    "message": "تعذر حفظ الإعدادات"
+  },
+  "saveSuccess": {
+    "message": "تم حفظ الإعدادات"
+  },
+  "scoreLabel": {
+    "message": "النتيجة"
+  },
+  "sensitivityHigh": {
+    "message": "مرتفعة"
+  },
+  "sensitivityLabel": {
+    "message": "حساسية الكشف"
+  },
+  "sensitivityLow": {
+    "message": "منخفضة"
+  },
+  "sensitivityMedium": {
+    "message": "متوسطة"
+  },
+  "settingsTitle": {
+    "message": "الإعدادات"
+  },
+  "stateAnalyzing": {
+    "message": "جارٍ التحليل…"
+  },
+  "stateOff": {
+    "message": "الحماية متوقفة"
+  },
+  "stateSecure": {
+    "message": "الحماية نشطة"
+  },
+  "stateThreat": {
+    "message": "تم رصد تهديد"
+  },
+  "stateThreatBlocked": {
+    "message": "تم 차단 التهديد"
+  },
+  "verdictDangerous": {
+    "message": "خطير"
+  },
+  "verdictSafe": {
+    "message": "آمن"
+  },
+  "verdictSuspicious": {
+    "message": "مشكوك"
+  }
+}

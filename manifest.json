@@ -1,15 +1,17 @@
 {
   "manifest_version": 3,
-  "name": "Cyber Guard",
-  "version": "0.1.0",
-  "description": "Pauses downloads briefly while Cyber Guard performs a safety check.",
+  "name": "__MSG_extName__",
+  "short_name": "__MSG_extShortName__",
+  "version": "0.2.0",
+  "description": "__MSG_extDescription__",
+  "default_locale": "en",
   "minimum_chrome_version": "114",
   "background": {
     "service_worker": "background.js",
     "type": "module"
   },
   "action": {
-    "default_title": "Cyber Guard",
+    "default_title": "__MSG_extShortName__",
     "default_popup": "popup.html",
     "default_icon": {
       "16": "icons/icon-16.png",
@@ -26,5 +28,12 @@
     "storage",
     "notifications",
     "alarms"
+  ],
+  "optional_permissions": [
+    "scripting"
+  ],
+  "optional_host_permissions": [
+    "http://*/*",
+    "https://*/*"
   ]
 }

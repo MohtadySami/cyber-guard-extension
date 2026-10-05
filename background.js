@@ -2,6 +2,21 @@ import { evaluate } from "./lib/scoring.js";
 import { buildNotificationTitle, buildNotificationMessage, buildCompletedNotificationTitle, buildCompletedNotificationMessage } from "./lib/alert.js";
 import { getHostname, resolveFilename } from "./lib/heuristics.js";
 import { getHistory, addHistoryEntry, clearHistory } from "./lib/history.js";
+import {
+  normalizeLanguage,
+  getNotificationButtons,
+  loadCatalogue,
+  hasCatalogue,
+} from "./lib/i18n.js";
+import { assess, THREAT_STATES } from "./lib/threat/engine.js";
+import { selectProvider } from "./lib/threat/provider.js";
+import {
+  shouldAlertOnPage,
+  buildAlertPayload,
+  renderPageAlert,
+  hasPageAlertPermission,
+  PAGE_ALERT_PERMISSION,
+} from "./lib/page-alert.js";
 // A. Constants
 
 const DEFAULT_SETTINGS = {
@@ -9,6 +24,15 @@ const DEFAULT_SETTINGS = {
   autoResumeSafe: true,
   trustedDomains: [],
   sensitivity: "medium",
+  // UI language only. Presentation never affects analysis. Installations from
+  // 0.1.x stored an explicit `language`, so they keep their choice; only installs
+  // with no stored value get the 0.2.0 default.
+  language: "en",
+  // Page threat alerts are opt-in. `scripting` is an OPTIONAL permission, so
+  // nothing is granted until the user explicitly enables this.
+  pageAlerts: false,
+  // No external threat-intelligence provider ships in 0.2.0.
+  threatIntel: false,
 };
 
 // Backend analysis was never implemented and was removed for 0.1.0. These keys
@@ -50,12 +74,15 @@ const completedRiskNotified = new Set();
 async function getSettings() {
   try {
     const { settings = {} } = await chrome.storage.local.get("settings");
-    return {
+    const merged = {
       ...DEFAULT_SETTINGS,
       ...stripRetiredSettings(
         settings && typeof settings === "object" ? settings : {},
       ),
     };
+    // A missing or malformed language must never leak through to the UI.
+    merged.language = normalizeLanguage(merged.language);
+    return merged;
   } catch (error) {
     console.error(`${LOG_PREFIX} settings read failed; using defaults`, error);
     return { ...DEFAULT_SETTINGS };
@@ -75,6 +102,9 @@ async function setSettings(partial) {
       ...current,
       ...(partial && typeof partial === "object" ? partial : {}),
     });
+    if (Object.hasOwn(next, "language")) {
+      next.language = normalizeLanguage(next.language);
+    }
     await chrome.storage.local.set({ settings: next });
     return next;
   } catch (error) {
@@ -163,6 +193,46 @@ function log(step, downloadId, details = "") {
 // D. Download handling
 
 /**
+ * Resolves the originating tab ID for a download.
+ *
+ * Resolution strategy — strictly evidence-based, never a guess:
+ *
+ * 1. Use context.tabId if it is already a valid integer ≥ 0.
+ * 2. If context.referrer is an HTTP/HTTPS URL, search open tabs by that URL.
+ *    This only works if the optional host permission has been granted.
+ *
+ * There is NO active-tab fallback. Injecting a Cyber Guard alert into an
+ * arbitrary active tab (which the user may have switched to after starting the
+ * download) would display a misleading warning on an unrelated page. When no
+ * source tab can be reliably identified, the caller falls back to the Chrome
+ * notification, which is always correct.
+ *
+ * @param {Record<string, unknown>} context - Download item or alert context.
+ * @returns {Promise<number|null>} Resolved tab ID, or null if not determinable.
+ */
+async function resolveOriginatingTabId(context) {
+  if (context && Number.isInteger(context.tabId) && context.tabId >= 0) {
+    return context.tabId;
+  }
+  if (typeof chrome === "undefined" || !chrome.tabs || typeof chrome.tabs.query !== "function") {
+    return null;
+  }
+  if (context && typeof context.referrer === "string" && context.referrer.startsWith("http")) {
+    try {
+      const tabs = await chrome.tabs.query({ url: context.referrer });
+      if (tabs && tabs.length > 0 && Number.isInteger(tabs[0].id) && tabs[0].id >= 0) {
+        log("resolve tab by referrer", context?.id || "unknown", `tabId=${tabs[0].id}`);
+        return tabs[0].id;
+      }
+    } catch (err) {
+      log("resolve tab error", context?.id || "unknown", err?.message || String(err));
+    }
+  }
+  // No reliable originating tab can be identified — caller uses notification fallback.
+  return null;
+}
+
+/**
  * Pauses, performs the Step 1 analysis stub, then always attempts to resume a download.
  *
  * @param {chrome.downloads.DownloadItem} item - The newly created download.
@@ -175,6 +245,12 @@ async function handleNewDownload(item) {
   if (!settings.enabled) {
     log("skipped (disabled)", downloadId, "download left untouched");
     return;
+  }
+
+  // Resolve originating tab early while user focus is still on the download page
+  const originatingTabId = await resolveOriginatingTabId(item);
+  if (originatingTabId !== null && item.tabId === undefined) {
+    item.tabId = originatingTabId;
   }
 
   log("created", downloadId, item.filename || item.url || "unknown download");
@@ -191,6 +267,7 @@ async function handleNewDownload(item) {
     const pendingSaved = await markPending(downloadId, {
       url: item.url,
       filename: item.filename,
+      tabId: item.tabId,
       startedAt: Date.now(),
     });
     log(
@@ -249,11 +326,15 @@ async function handleNewDownload(item) {
         //
         // Cancelled, interrupted and missing downloads stay un-actioned: there
         // is no completed file to warn about or remove.
-        if (latestItem && latestItem.state === "complete" && isRisk) {          log(
+        if (latestItem && latestItem.state === "complete" && isRisk) {
+          log(
             "download completed before analysis finished",
             downloadId,
             `verdict=${result.verdict}, actioning completed file`,
           );
+          if (item.tabId !== undefined) {
+            latestItem.tabId = item.tabId;
+          }
           outcome = await notifyCompletedRisk(latestItem, result);
         } else {
           log(
@@ -270,6 +351,15 @@ async function handleNewDownload(item) {
         outcome = await holdDownload(item, result);
       } else {
         outcome = "resumed";
+        const ctx = buildContext(item);
+        const filename = resolveFilename(ctx);
+        void maybeShowPageAlert({
+          verdict: "safe",
+          tabId: item.tabId,
+          filename,
+          reasons: result?.reasons || [],
+          language: settings.language,
+        }).catch(() => {});
       }
     } catch (analysisError) {
       log("analysis error", downloadId, analysisError?.message || String(analysisError));
@@ -348,6 +438,9 @@ async function holdDownload(item, result) {
     existing.host = host;
     await chrome.storage.session.set({ [key]: existing });
 
+    const language = normalizeLanguage((await getSettings()).language);
+    await ensureCatalogue(language);
+
     log("notification creating", downloadId);
     let notificationFailed = false;
     let notificationErrorMsg = null;
@@ -359,13 +452,11 @@ async function holdDownload(item, result) {
             {
               type: "basic",
               iconUrl: "icons/icon-128.png",
-              title: buildNotificationTitle(verdict),
-              message: buildNotificationMessage(filename, host, result?.reasons || []),
+              title: buildNotificationTitle(verdict, language),
+              message: buildNotificationMessage(filename, host, result?.reasons || [], language),
               requireInteraction: true,
-              buttons: [
-                { title: "Cancel download" },
-                { title: "Allow anyway" },
-              ],
+              // Button order is the decision contract: 0 = cancel, 1 = allow.
+              buttons: getNotificationButtons("held", language).map((title) => ({ title })),
             },
             (id) => {
               if (chrome.runtime.lastError) {
@@ -395,6 +486,15 @@ async function holdDownload(item, result) {
     } else {
       log("notification created", downloadId);
     }
+
+    // Page alert is best-effort presentation; it never gates the decision.
+    void maybeShowPageAlert({
+      verdict,
+      tabId: item.tabId,
+      filename,
+      reasons: result?.reasons || [],
+      language,
+    }).catch(() => {});
 
     const alarmDelayMs = DECISION_TIMEOUT_MS;
     try {
@@ -482,6 +582,19 @@ async function notifyCompletedRisk(item, result) {
       },
     });
 
+    const language = normalizeLanguage((await getSettings()).language);
+    await ensureCatalogue(language);
+
+    // The file is already on disk, so this is the most important moment to warn
+    // the user on the page itself.
+    void maybeShowPageAlert({
+      verdict,
+      tabId: item.tabId,
+      filename,
+      reasons: result?.reasons || [],
+      language,
+    }).catch(() => {});
+
     log("completed notification creating", downloadId, `verdict=${verdict}`);
     let notificationFailed = false;
     let notificationErrorMsg = null;
@@ -493,14 +606,16 @@ async function notifyCompletedRisk(item, result) {
             {
               type: "basic",
               iconUrl: "icons/icon-128.png",
-              title: buildCompletedNotificationTitle(verdict),
+              title: buildCompletedNotificationTitle(verdict, language),
               message: buildCompletedNotificationMessage(
                 filename,
                 host,
                 result?.reasons || [],
+                language,
               ),
               requireInteraction: true,
-              buttons: [{ title: "Delete file" }, { title: "Keep file" }],
+              // Button order is the decision contract: 0 = delete, 1 = keep.
+              buttons: getNotificationButtons("completed", language).map((title) => ({ title })),
             },
             (id) => {
               if (chrome.runtime.lastError) {
@@ -564,6 +679,104 @@ async function notifyCompletedRisk(item, result) {
       log("notifyCompletedRisk fallback failed", downloadId, e2?.message || String(e2));
       return "resumed";
     }
+  }
+}
+
+/**
+ * Loads the message catalogue for a language, once per service-worker lifetime.
+ *
+ * The service worker must render notifications and inject page alerts in the
+ * user's chosen language. `chrome.i18n` cannot be used for that (it resolves
+ * against the browser locale, crbug/660704), so the catalogue is read directly
+ * from the packaged _locales directory.
+ *
+ * @param {string} language - Normalized language code.
+ * @returns {Promise<void>} Resolves once the catalogue is available or failed.
+ */
+async function ensureCatalogue(language) {
+  const lang = normalizeLanguage(language);
+  if (hasCatalogue(lang)) {
+    return;
+  }
+  await loadCatalogue(lang, async (path) => {
+    const response = await fetch(chrome.runtime.getURL(path));
+    if (!response.ok) {
+      throw new Error(`catalogue ${path} -> ${response.status}`);
+    }
+    return await response.json();
+  });
+}
+
+/**
+ * Shows the page threat alert in the tab a dangerous download came from.
+ *
+ * Injected one-shot via chrome.scripting.executeScript(); there is no
+ * permanently registered content script. Does nothing unless the user granted
+ * the optional `scripting` permission and enabled page alerts.
+ *
+ * Never throws and never affects the download decision.
+ *
+ * @param {{verdict: string, tabId?: number, filename?: string, reasons?: Array, language?: string}} params
+ * @returns {Promise<boolean>} True when the alert was injected.
+ */
+async function maybeShowPageAlert(params) {
+  const safe = params && typeof params === "object" ? params : {};
+  const settings = await getSettings();
+  if (settings.pageAlerts !== true) {
+    return false;
+  }
+
+  let tabId = safe.tabId;
+  if (!Number.isInteger(tabId) || tabId < 0) {
+    tabId = await resolveOriginatingTabId(safe);
+  }
+
+  const safeWithTab = { ...safe, tabId };
+  if (!shouldAlertOnPage(safeWithTab)) {
+    log("page alert skipped", tabId, "shouldAlertOnPage returned false");
+    return false;
+  }
+
+  const permissionsApi =
+    typeof chrome !== "undefined" && chrome.permissions ? chrome.permissions : null;
+  if (!(await hasPageAlertPermission(permissionsApi))) {
+    log("page alert skipped", tabId, "permission not granted");
+    return false;
+  }
+  if (
+    typeof chrome === "undefined" ||
+    !chrome.scripting ||
+    typeof chrome.scripting.executeScript !== "function"
+  ) {
+    log("page alert skipped", tabId, "chrome.scripting unavailable");
+    return false;
+  }
+
+  const language = normalizeLanguage(safe.language || settings.language);
+  await ensureCatalogue(language);
+  const reason = Array.isArray(safe.reasons) && safe.reasons.length > 0 ? safe.reasons[0] : null;
+  const payload = buildAlertPayload({
+    verdict: safe.verdict,
+    filename: safe.filename,
+    reason,
+    language,
+  });
+
+  try {
+    // `func` is serialized and run in the page's ISOLATED world, so it cannot
+    // touch extension APIs and the page cannot reach its scope.
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      world: "ISOLATED",
+      func: renderPageAlert,
+      args: [payload],
+    });
+    log("page alert shown", tabId, `verdict=${safe.verdict} lang=${language}`);
+    return true;
+  } catch (error) {
+    // A tab can be gone, chrome://, or the Web Store. Never fatal.
+    log("page alert failed", tabId, error?.message || String(error));
+    return false;
   }
 }
 
@@ -654,12 +867,31 @@ async function analyzeDownload(item, settings) {
     log("holding", item.id, `(${verdictResult.verdict}) score=${verdictResult.score}`);
   }
 
+  // Threat assessment is ADDITIVE. The verdict above is already final and is
+  // never modified by this layer: the engine derives its state from the same
+  // local verdict, and a provider can only corroborate it.
+  let threat = null;
+  try {
+    threat = await assess(ctx, settings, {
+      evaluate,
+      provider: selectProvider(settings),
+    });
+    log(
+      "threat state",
+      item.id,
+      `${threat.state} verdict=${threat.finalVerdict} provider=${threat.provider.verdict}`,
+    );
+  } catch (threatError) {
+    log("threat engine error", item.id, threatError?.message || String(threatError));
+  }
+
   return {
     downloadId: item.id,
     score: verdictResult.score,
     verdict: verdictResult.verdict,
     reasons: verdictResult.reasons,
     source: verdictResult.source,
+    threat,
     timestamp: Date.now(),
   };
 }
@@ -977,6 +1209,72 @@ async function resolveDecision(downloadId, action, cause) {
 // F. Message handlers (stubs only)
 
 /**
+ * Reports the current visual threat state for the popup.
+ *
+ * Derived from the most recent risky decision in history, so it survives a
+ * service-worker restart. Defaults to SECURE.
+ *
+ * @returns {Promise<{state: string, verdict: string, score: number}>} The state.
+ */
+async function getThreatState() {
+  const settings = await getSettings();
+  if (settings.enabled === false) {
+    return { state: THREAT_STATES.SECURE, verdict: "safe", score: 0 };
+  }
+  let history = [];
+  try {
+    history = await getHistory();
+  } catch {
+    history = [];
+  }
+  const latest = Array.isArray(history) && history.length > 0 ? history[0] : null;
+  const verdict = latest && typeof latest.verdict === "string" ? latest.verdict : "safe";
+  const score = latest && Number.isFinite(latest.score) ? latest.score : 0;
+  return {
+    state: verdict === "dangerous" ? THREAT_STATES.THREAT : THREAT_STATES.SECURE,
+    verdict,
+    score,
+  };
+}
+
+/**
+ * Requests the optional `scripting` permission for page threat alerts.
+ *
+ * Requires a user gesture, so it is only ever called from the popup. A denial is
+ * a normal outcome, not an error: the feature stays off.
+ *
+ * @returns {Promise<boolean>} True when the permission was granted.
+ */
+async function requestPageAlertPermission() {
+  const permissionsApi =
+    typeof chrome !== "undefined" && chrome.permissions ? chrome.permissions : null;
+  if (!permissionsApi) {
+    return false;
+  }
+  if (await hasPageAlertPermission(permissionsApi)) {
+    await setSettings({ pageAlerts: true });
+    return true;
+  }
+  if (typeof permissionsApi.request !== "function") {
+    return false;
+  }
+  try {
+    const granted = await permissionsApi.request(PAGE_ALERT_PERMISSION);
+    if (granted === true) {
+      await setSettings({ pageAlerts: true });
+      return true;
+    }
+    // Explicitly record the refusal so the popup can explain itself.
+    await setSettings({ pageAlerts: false });
+    return false;
+  } catch (error) {
+    log("page alert permission error", "system", error?.message || String(error));
+    await setSettings({ pageAlerts: false });
+    return false;
+  }
+}
+
+/**
  * Responds to the Step 1 settings messages and reserves the remaining UI contract.
  *
  * @param {Record<string, unknown>} message - The incoming runtime message.
@@ -991,6 +1289,20 @@ function onMessage(message, sender, sendResponse) {
   if (sender && sender.id && sender.id !== chrome.runtime.id) {
     sendResponse({ ok: false, error: "rejected" });
     return undefined;
+  }
+
+  if (message.type === "GET_THREAT_STATE") {
+    void getThreatState()
+      .then((state) => sendResponse({ ok: true, state }))
+      .catch((error) => sendResponse({ ok: false, error: error?.message || String(error) }));
+    return true;
+  }
+
+  if (message.type === "REQUEST_PAGE_ALERT_PERMISSION") {
+    void requestPageAlertPermission()
+      .then((granted) => sendResponse({ ok: true, granted }))
+      .catch((error) => sendResponse({ ok: false, error: error?.message || String(error) }));
+    return true;
   }
 
   if (message.type === "GET_SETTINGS") {
@@ -1080,6 +1392,11 @@ export {
   getHistory,
   addHistoryEntry,
   clearHistory,
+  getThreatState,
+  requestPageAlertPermission,
+  maybeShowPageAlert,
+  resolveOriginatingTabId,
+  ensureCatalogue,
 };
 
-
+

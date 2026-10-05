@@ -1,0 +1,327 @@
+{
+  "alertBody": {
+    "message": "Cyber Guard paused and blocked a risky download from this page."
+  },
+  "alertBodyDangerous": {
+    "message": "Cyber Guard paused and blocked a dangerous download from this page."
+  },
+  "alertBodySafe": {
+    "message": "Cyber Guard checked this download and found no threat signals."
+  },
+  "alertBodySuspicious": {
+    "message": "Cyber Guard detected potential risk signals for this download."
+  },
+  "alertDismiss": {
+    "message": "Dismiss"
+  },
+  "alertFilename": {
+    "message": "File"
+  },
+  "alertHeadline": {
+    "message": "CRITICAL THREAT DETECTED"
+  },
+  "alertHeadlineDangerous": {
+    "message": "CRITICAL THREAT DETECTED"
+  },
+  "alertHeadlineSafe": {
+    "message": "Download appears SAFE"
+  },
+  "alertHeadlineSuspicious": {
+    "message": "SUSPICIOUS DOWNLOAD DETECTED"
+  },
+  "btnAllowAnyway": {
+    "message": "Allow anyway"
+  },
+  "btnCancelDownload": {
+    "message": "Cancel download"
+  },
+  "btnDeleteFile": {
+    "message": "Delete file"
+  },
+  "btnKeepFile": {
+    "message": "Keep file"
+  },
+  "clearHistory": {
+    "message": "Clear history"
+  },
+  "decisionAllow": {
+    "message": "Allowed"
+  },
+  "decisionCancel": {
+    "message": "Cancelled"
+  },
+  "decisionDelete": {
+    "message": "File deleted"
+  },
+  "decisionKeep": {
+    "message": "File kept"
+  },
+  "decisionPrefix": {
+    "message": "decision"
+  },
+  "enableLabel": {
+    "message": "Enable protection"
+  },
+  "extDescription": {
+    "message": "Pauses downloads briefly to check the file name, source and type for risk."
+  },
+  "extName": {
+    "message": "Cyber Guard: Download Security Assistant"
+  },
+  "extShortName": {
+    "message": "Cyber Guard: Download Security Assistant"
+  },
+  "historyTitle": {
+    "message": "Recent checks"
+  },
+  "languageLabel": {
+    "message": "Interface language"
+  },
+  "languageOptionAr": {
+    "message": "Arabic"
+  },
+  "languageOptionEn": {
+    "message": "English"
+  },
+  "languageOptionEs": {
+    "message": "Spanish"
+  },
+  "languageOptionFr": {
+    "message": "French"
+  },
+  "loadError": {
+    "message": "Could not load settings"
+  },
+  "noHistory": {
+    "message": "No checks yet"
+  },
+  "notifCompletedActionHint": {
+    "message": "Choose \"Delete file\" to remove it from disk, or \"Keep file\" to allow it."
+  },
+  "notifCompletedIntro": {
+    "message": "This file finished downloading before Cyber Guard could pause it."
+  },
+  "notifFile": {
+    "message": "File"
+  },
+  "notifSource": {
+    "message": "Source"
+  },
+  "notifyCompletedDangerousTitle": {
+    "message": "Dangerous file already downloaded"
+  },
+  "notifyCompletedSuspiciousTitle": {
+    "message": "Suspicious file already downloaded"
+  },
+  "notifyDangerousTitle": {
+    "message": "Dangerous download"
+  },
+  "notifySuspiciousTitle": {
+    "message": "Suspicious download"
+  },
+  "pageAlertLabel": {
+    "message": "Show threat alert on the page"
+  },
+  "pageAlertLabelHint": {
+    "message": "Optional. Grants Cyber Guard access to alert you on the page a risky download came from."
+  },
+  "pageAlertPermissionDenied": {
+    "message": "Permission denied — page alerts stay off."
+  },
+  "providerUnavailableLabel": {
+    "message": "Threat intelligence unavailable — using local checks only"
+  },
+  "reasonContainerExtension": {
+    "message": "File name $FILENAME$ uses container extension .$EXTENSION$",
+    "placeholders": {
+      "EXTENSION": {
+        "content": "$2"
+      },
+      "FILENAME": {
+        "content": "$1"
+      }
+    }
+  },
+  "reasonDoubleExtension": {
+    "message": "File name $FILENAME$ uses a double extension (.$PREVIOUSEXTENSION$.$LASTEXTENSION$)",
+    "placeholders": {
+      "FILENAME": {
+        "content": "$1"
+      },
+      "LASTEXTENSION": {
+        "content": "$4"
+      },
+      "PREVIOUSEXTENSION": {
+        "content": "$3"
+      }
+    }
+  },
+  "reasonExecutableExtension": {
+    "message": "File name $FILENAME$ uses executable extension .$EXTENSION$",
+    "placeholders": {
+      "EXTENSION": {
+        "content": "$2"
+      },
+      "FILENAME": {
+        "content": "$1"
+      }
+    }
+  },
+  "reasonInsecureHttp": {
+    "message": "Download URL $URL$ uses insecure HTTP",
+    "placeholders": {
+      "URL": {
+        "content": "$6"
+      }
+    }
+  },
+  "reasonIpHost": {
+    "message": "Download host $HOSTNAME$ is an IP address",
+    "placeholders": {
+      "HOSTNAME": {
+        "content": "$7"
+      }
+    }
+  },
+  "reasonLongRedirectChain": {
+    "message": "Download followed a redirect chain of $HOPS$ hops",
+    "placeholders": {
+      "HOPS": {
+        "content": "$10"
+      }
+    }
+  },
+  "reasonMacroDocument": {
+    "message": "File name $FILENAME$ is a macro-enabled document (.$EXTENSION$)",
+    "placeholders": {
+      "EXTENSION": {
+        "content": "$2"
+      },
+      "FILENAME": {
+        "content": "$1"
+      }
+    }
+  },
+  "reasonMimeMismatch": {
+    "message": "File name $FILENAME$ uses document/media extension .$EXTENSION$ but MIME type is $MIME$",
+    "placeholders": {
+      "EXTENSION": {
+        "content": "$2"
+      },
+      "FILENAME": {
+        "content": "$1"
+      },
+      "MIME": {
+        "content": "$5"
+      }
+    }
+  },
+  "reasonPunycodeHost": {
+    "message": "Download host $HOSTNAME$ contains punycode label $PUNYLABEL$",
+    "placeholders": {
+      "HOSTNAME": {
+        "content": "$7"
+      },
+      "PUNYLABEL": {
+        "content": "$9"
+      }
+    }
+  },
+  "reasonRtloCharacter": {
+    "message": "File name $FILENAME$ contains a bidirectional-control character",
+    "placeholders": {
+      "FILENAME": {
+        "content": "$1"
+      }
+    }
+  },
+  "reasonScriptExtension": {
+    "message": "File name $FILENAME$ uses script extension .$EXTENSION$",
+    "placeholders": {
+      "EXTENSION": {
+        "content": "$2"
+      },
+      "FILENAME": {
+        "content": "$1"
+      }
+    }
+  },
+  "reasonSuspiciousTld": {
+    "message": "Download host $HOSTNAME$ uses suspicious TLD .$TLD$",
+    "placeholders": {
+      "HOSTNAME": {
+        "content": "$7"
+      },
+      "TLD": {
+        "content": "$8"
+      }
+    }
+  },
+  "reasonTrailingSpacesOrDots": {
+    "message": "File name $FILENAME$ contains misleading spaces or dots before its extension",
+    "placeholders": {
+      "FILENAME": {
+        "content": "$1"
+      }
+    }
+  },
+  "reasonTrustedDomain": {
+    "message": "Source host $HOSTNAME$ is trusted",
+    "placeholders": {
+      "HOSTNAME": {
+        "content": "$7"
+      }
+    }
+  },
+  "save": {
+    "message": "Save"
+  },
+  "saveError": {
+    "message": "Could not save settings"
+  },
+  "saveSuccess": {
+    "message": "Settings saved"
+  },
+  "scoreLabel": {
+    "message": "score"
+  },
+  "sensitivityHigh": {
+    "message": "High"
+  },
+  "sensitivityLabel": {
+    "message": "Detection sensitivity"
+  },
+  "sensitivityLow": {
+    "message": "Low"
+  },
+  "sensitivityMedium": {
+    "message": "Medium"
+  },
+  "settingsTitle": {
+    "message": "Settings"
+  },
+  "stateAnalyzing": {
+    "message": "Analyzing…"
+  },
+  "stateOff": {
+    "message": "Protection is off"
+  },
+  "stateSecure": {
+    "message": "Active Protection"
+  },
+  "stateThreat": {
+    "message": "Threat Detected"
+  },
+  "stateThreatBlocked": {
+    "message": "Threat Blocked"
+  },
+  "verdictDangerous": {
+    "message": "Dangerous"
+  },
+  "verdictSafe": {
+    "message": "Safe"
+  },
+  "verdictSuspicious": {
+    "message": "Suspicious"
+  }
+}

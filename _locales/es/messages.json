@@ -1,0 +1,327 @@
+{
+  "alertBody": {
+    "message": "Cyber Guard pausó y bloqueó una descarga arriesgada desde esta página."
+  },
+  "alertBodyDangerous": {
+    "message": "Cyber Guard pausó y bloqueó una descarga peligrosa de esta página."
+  },
+  "alertBodySafe": {
+    "message": "Cyber Guard analizó esta descarga y no encontró señales de amenaza."
+  },
+  "alertBodySuspicious": {
+    "message": "Cyber Guard detectó posibles señales de riesgo en esta descarga."
+  },
+  "alertDismiss": {
+    "message": "Descartar"
+  },
+  "alertFilename": {
+    "message": "Archivo"
+  },
+  "alertHeadline": {
+    "message": "AMENAZA CRÍTICA DETECTADA"
+  },
+  "alertHeadlineDangerous": {
+    "message": "AMENAZA CRÍTICA DETECTADA"
+  },
+  "alertHeadlineSafe": {
+    "message": "La descarga parece SEGURA"
+  },
+  "alertHeadlineSuspicious": {
+    "message": "DESCARGA SOSPECHOSA DETECTADA"
+  },
+  "btnAllowAnyway": {
+    "message": "Permitir de todos modos"
+  },
+  "btnCancelDownload": {
+    "message": "Cancelar descarga"
+  },
+  "btnDeleteFile": {
+    "message": "Eliminar archivo"
+  },
+  "btnKeepFile": {
+    "message": "Conservar archivo"
+  },
+  "clearHistory": {
+    "message": "Borrar historial"
+  },
+  "decisionAllow": {
+    "message": "Permitido"
+  },
+  "decisionCancel": {
+    "message": "Cancelado"
+  },
+  "decisionDelete": {
+    "message": "Archivo eliminado"
+  },
+  "decisionKeep": {
+    "message": "Archivo conservado"
+  },
+  "decisionPrefix": {
+    "message": "decisión"
+  },
+  "enableLabel": {
+    "message": "Activar la protección"
+  },
+  "extDescription": {
+    "message": "Pausa las descargas brevemente para revisar el nombre, el origen y el tipo del archivo."
+  },
+  "extName": {
+    "message": "Cyber Guard: Asistente de seguridad de descargas"
+  },
+  "extShortName": {
+    "message": "Cyber Guard: Asistente de seguridad de descargas"
+  },
+  "historyTitle": {
+    "message": "Comprobaciones recientes"
+  },
+  "languageLabel": {
+    "message": "Idioma de la interfaz"
+  },
+  "languageOptionAr": {
+    "message": "Árabe"
+  },
+  "languageOptionEn": {
+    "message": "Inglés"
+  },
+  "languageOptionEs": {
+    "message": "Español"
+  },
+  "languageOptionFr": {
+    "message": "Francés"
+  },
+  "loadError": {
+    "message": "No se pudieron cargar los ajustes"
+  },
+  "noHistory": {
+    "message": "Aún no hay comprobaciones"
+  },
+  "notifCompletedActionHint": {
+    "message": "Elige \"Eliminar archivo\" para borrarlo del disco o \"Conservar archivo\" para permitirlo."
+  },
+  "notifCompletedIntro": {
+    "message": "Este archivo terminó de descargarse antes de que Cyber Guard pudiera pausarlo."
+  },
+  "notifFile": {
+    "message": "Archivo"
+  },
+  "notifSource": {
+    "message": "Origen"
+  },
+  "notifyCompletedDangerousTitle": {
+    "message": "Archivo peligroso ya descargado"
+  },
+  "notifyCompletedSuspiciousTitle": {
+    "message": "Archivo sospechoso ya descargado"
+  },
+  "notifyDangerousTitle": {
+    "message": "Descarga peligrosa"
+  },
+  "notifySuspiciousTitle": {
+    "message": "Descarga sospechosa"
+  },
+  "pageAlertLabel": {
+    "message": "Mostrar alerta de amenaza en la página"
+  },
+  "pageAlertLabelHint": {
+    "message": "Opcional. Otorga a Cyber Guard permiso para avisarte en la página de origen de una descarga arriesgada."
+  },
+  "pageAlertPermissionDenied": {
+    "message": "Permiso denegado: las alertas de página siguen desactivadas."
+  },
+  "providerUnavailableLabel": {
+    "message": "Inteligencia de amenazas no disponible: solo comprobaciones locales"
+  },
+  "reasonContainerExtension": {
+    "message": "El nombre $FILENAME$ usa una extensión de contenedor .$EXTENSION$",
+    "placeholders": {
+      "EXTENSION": {
+        "content": "$2"
+      },
+      "FILENAME": {
+        "content": "$1"
+      }
+    }
+  },
+  "reasonDoubleExtension": {
+    "message": "El nombre $FILENAME$ usa una doble extensión (.$PREVIOUSEXTENSION$.$LASTEXTENSION$)",
+    "placeholders": {
+      "FILENAME": {
+        "content": "$1"
+      },
+      "LASTEXTENSION": {
+        "content": "$4"
+      },
+      "PREVIOUSEXTENSION": {
+        "content": "$3"
+      }
+    }
+  },
+  "reasonExecutableExtension": {
+    "message": "El nombre $FILENAME$ usa una extensión ejecutable .$EXTENSION$",
+    "placeholders": {
+      "EXTENSION": {
+        "content": "$2"
+      },
+      "FILENAME": {
+        "content": "$1"
+      }
+    }
+  },
+  "reasonInsecureHttp": {
+    "message": "La URL de descarga $URL$ usa HTTP no seguro",
+    "placeholders": {
+      "URL": {
+        "content": "$6"
+      }
+    }
+  },
+  "reasonIpHost": {
+    "message": "El host de descarga $HOSTNAME$ es una dirección IP",
+    "placeholders": {
+      "HOSTNAME": {
+        "content": "$7"
+      }
+    }
+  },
+  "reasonLongRedirectChain": {
+    "message": "La descarga siguió una cadena de redirecciones de $HOPS$ saltos",
+    "placeholders": {
+      "HOPS": {
+        "content": "$10"
+      }
+    }
+  },
+  "reasonMacroDocument": {
+    "message": "El nombre $FILENAME$ es un documento con macros (.$EXTENSION$)",
+    "placeholders": {
+      "EXTENSION": {
+        "content": "$2"
+      },
+      "FILENAME": {
+        "content": "$1"
+      }
+    }
+  },
+  "reasonMimeMismatch": {
+    "message": "El nombre $FILENAME$ usa extensión de documento/multimedia .$EXTENSION$ pero el tipo MIME es $MIME$",
+    "placeholders": {
+      "EXTENSION": {
+        "content": "$2"
+      },
+      "FILENAME": {
+        "content": "$1"
+      },
+      "MIME": {
+        "content": "$5"
+      }
+    }
+  },
+  "reasonPunycodeHost": {
+    "message": "El host de descarga $HOSTNAME$ contiene una etiqueta punycode $PUNYLABEL$",
+    "placeholders": {
+      "HOSTNAME": {
+        "content": "$7"
+      },
+      "PUNYLABEL": {
+        "content": "$9"
+      }
+    }
+  },
+  "reasonRtloCharacter": {
+    "message": "El nombre $FILENAME$ contiene un carácter de control bidireccional",
+    "placeholders": {
+      "FILENAME": {
+        "content": "$1"
+      }
+    }
+  },
+  "reasonScriptExtension": {
+    "message": "El nombre $FILENAME$ usa una extensión de script .$EXTENSION$",
+    "placeholders": {
+      "EXTENSION": {
+        "content": "$2"
+      },
+      "FILENAME": {
+        "content": "$1"
+      }
+    }
+  },
+  "reasonSuspiciousTld": {
+    "message": "El host de descarga $HOSTNAME$ usa un TLD sospechoso .$TLD$",
+    "placeholders": {
+      "HOSTNAME": {
+        "content": "$7"
+      },
+      "TLD": {
+        "content": "$8"
+      }
+    }
+  },
+  "reasonTrailingSpacesOrDots": {
+    "message": "El nombre $FILENAME$ contiene espacios o puntos engañosos antes de su extensión",
+    "placeholders": {
+      "FILENAME": {
+        "content": "$1"
+      }
+    }
+  },
+  "reasonTrustedDomain": {
+    "message": "El host de origen $HOSTNAME$ es de confianza",
+    "placeholders": {
+      "HOSTNAME": {
+        "content": "$7"
+      }
+    }
+  },
+  "save": {
+    "message": "Guardar"
+  },
+  "saveError": {
+    "message": "No se pudieron guardar los ajustes"
+  },
+  "saveSuccess": {
+    "message": "Ajustes guardados"
+  },
+  "scoreLabel": {
+    "message": "puntuación"
+  },
+  "sensitivityHigh": {
+    "message": "Alta"
+  },
+  "sensitivityLabel": {
+    "message": "Sensibilidad de detección"
+  },
+  "sensitivityLow": {
+    "message": "Baja"
+  },
+  "sensitivityMedium": {
+    "message": "Media"
+  },
+  "settingsTitle": {
+    "message": "Ajustes"
+  },
+  "stateAnalyzing": {
+    "message": "Analizando…"
+  },
+  "stateOff": {
+    "message": "La protección está desactivada"
+  },
+  "stateSecure": {
+    "message": "Protección activa"
+  },
+  "stateThreat": {
+    "message": "Amenaza detectada"
+  },
+  "stateThreatBlocked": {
+    "message": "Amenaza bloqueada"
+  },
+  "verdictDangerous": {
+    "message": "Peligroso"
+  },
+  "verdictSafe": {
+    "message": "Seguro"
+  },
+  "verdictSuspicious": {
+    "message": "Sospechoso"
+  }
+}

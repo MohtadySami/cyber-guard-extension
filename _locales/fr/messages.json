@@ -1,0 +1,327 @@
+{
+  "alertBody": {
+    "message": "Cyber Guard a mis en pause et bloqué un téléchargement risqué depuis cette page."
+  },
+  "alertBodyDangerous": {
+    "message": "Cyber Guard a mis en pause et bloqué un téléchargement dangereux depuis cette page."
+  },
+  "alertBodySafe": {
+    "message": "Cyber Guard a vérifié ce téléchargement et n'a trouvé aucun signal de menace."
+  },
+  "alertBodySuspicious": {
+    "message": "Cyber Guard a détecté des signaux de risque potentiels pour ce téléchargement."
+  },
+  "alertDismiss": {
+    "message": "Fermer"
+  },
+  "alertFilename": {
+    "message": "Fichier"
+  },
+  "alertHeadline": {
+    "message": "MENACE CRITIQUE DÉTECTÉE"
+  },
+  "alertHeadlineDangerous": {
+    "message": "MENACE CRITIQUE DÉTECTÉE"
+  },
+  "alertHeadlineSafe": {
+    "message": "Le téléchargement semble SÛR"
+  },
+  "alertHeadlineSuspicious": {
+    "message": "TÉLÉCHARGEMENT SUSPECT DÉTECTÉ"
+  },
+  "btnAllowAnyway": {
+    "message": "Autoriser quand même"
+  },
+  "btnCancelDownload": {
+    "message": "Annuler le téléchargement"
+  },
+  "btnDeleteFile": {
+    "message": "Supprimer le fichier"
+  },
+  "btnKeepFile": {
+    "message": "Conserver le fichier"
+  },
+  "clearHistory": {
+    "message": "Effacer l'historique"
+  },
+  "decisionAllow": {
+    "message": "Autorisé"
+  },
+  "decisionCancel": {
+    "message": "Annulé"
+  },
+  "decisionDelete": {
+    "message": "Fichier supprimé"
+  },
+  "decisionKeep": {
+    "message": "Fichier conservé"
+  },
+  "decisionPrefix": {
+    "message": "décision"
+  },
+  "enableLabel": {
+    "message": "Activer la protection"
+  },
+  "extDescription": {
+    "message": "Met en pause les téléchargements pour vérifier brièvement le nom, la source et le type du fichier."
+  },
+  "extName": {
+    "message": "Cyber Guard : Assistant de sécurité des téléchargements"
+  },
+  "extShortName": {
+    "message": "Cyber Guard : Assistant de sécurité des téléchargements"
+  },
+  "historyTitle": {
+    "message": "Vérifications récentes"
+  },
+  "languageLabel": {
+    "message": "Langue de l'interface"
+  },
+  "languageOptionAr": {
+    "message": "Arabe"
+  },
+  "languageOptionEn": {
+    "message": "Anglais"
+  },
+  "languageOptionEs": {
+    "message": "Espagnol"
+  },
+  "languageOptionFr": {
+    "message": "Français"
+  },
+  "loadError": {
+    "message": "Impossible de charger les paramètres"
+  },
+  "noHistory": {
+    "message": "Aucune vérification pour l'instant"
+  },
+  "notifCompletedActionHint": {
+    "message": "Choisissez \"Supprimer le fichier\" pour l'effacer du disque, ou \"Conserver le fichier\" pour l'autoriser."
+  },
+  "notifCompletedIntro": {
+    "message": "Ce fichier s'est terminé avant que Cyber Guard ait pu le mettre en pause."
+  },
+  "notifFile": {
+    "message": "Fichier"
+  },
+  "notifSource": {
+    "message": "Source"
+  },
+  "notifyCompletedDangerousTitle": {
+    "message": "Fichier dangereux déjà téléchargé"
+  },
+  "notifyCompletedSuspiciousTitle": {
+    "message": "Fichier suspect déjà téléchargé"
+  },
+  "notifyDangerousTitle": {
+    "message": "Téléchargement dangereux"
+  },
+  "notifySuspiciousTitle": {
+    "message": "Téléchargement suspect"
+  },
+  "pageAlertLabel": {
+    "message": "Afficher l'alerte de menace sur la page"
+  },
+  "pageAlertLabelHint": {
+    "message": "Facultatif. Accorde à Cyber Guard le droit de vous alerter sur la page d'origine d'un téléchargement risqué."
+  },
+  "pageAlertPermissionDenied": {
+    "message": "Permission refusée — les alertes de page restent désactivées."
+  },
+  "providerUnavailableLabel": {
+    "message": "Renseignement sur les menaces indisponible — contrôles locaux uniquement"
+  },
+  "reasonContainerExtension": {
+    "message": "Le nom $FILENAME$ utilise une extension de conteneur .$EXTENSION$",
+    "placeholders": {
+      "EXTENSION": {
+        "content": "$2"
+      },
+      "FILENAME": {
+        "content": "$1"
+      }
+    }
+  },
+  "reasonDoubleExtension": {
+    "message": "Le nom $FILENAME$ utilise une double extension (.$PREVIOUSEXTENSION$.$LASTEXTENSION$)",
+    "placeholders": {
+      "FILENAME": {
+        "content": "$1"
+      },
+      "LASTEXTENSION": {
+        "content": "$4"
+      },
+      "PREVIOUSEXTENSION": {
+        "content": "$3"
+      }
+    }
+  },
+  "reasonExecutableExtension": {
+    "message": "Le nom $FILENAME$ utilise une extension exécutable .$EXTENSION$",
+    "placeholders": {
+      "EXTENSION": {
+        "content": "$2"
+      },
+      "FILENAME": {
+        "content": "$1"
+      }
+    }
+  },
+  "reasonInsecureHttp": {
+    "message": "L'URL de téléchargement $URL$ utilise HTTP non sécurisé",
+    "placeholders": {
+      "URL": {
+        "content": "$6"
+      }
+    }
+  },
+  "reasonIpHost": {
+    "message": "L'hôte de téléchargement $HOSTNAME$ est une adresse IP",
+    "placeholders": {
+      "HOSTNAME": {
+        "content": "$7"
+      }
+    }
+  },
+  "reasonLongRedirectChain": {
+    "message": "Le téléchargement a suivi une chaîne de redirection de $HOPS$ sauts",
+    "placeholders": {
+      "HOPS": {
+        "content": "$10"
+      }
+    }
+  },
+  "reasonMacroDocument": {
+    "message": "Le nom $FILENAME$ est un document macro (.$EXTENSION$)",
+    "placeholders": {
+      "EXTENSION": {
+        "content": "$2"
+      },
+      "FILENAME": {
+        "content": "$1"
+      }
+    }
+  },
+  "reasonMimeMismatch": {
+    "message": "Le nom $FILENAME$ utilise une extension document/média .$EXTENSION$ mais le type MIME est $MIME$",
+    "placeholders": {
+      "EXTENSION": {
+        "content": "$2"
+      },
+      "FILENAME": {
+        "content": "$1"
+      },
+      "MIME": {
+        "content": "$5"
+      }
+    }
+  },
+  "reasonPunycodeHost": {
+    "message": "L'hôte de téléchargement $HOSTNAME$ contient une étiquette punycode $PUNYLABEL$",
+    "placeholders": {
+      "HOSTNAME": {
+        "content": "$7"
+      },
+      "PUNYLABEL": {
+        "content": "$9"
+      }
+    }
+  },
+  "reasonRtloCharacter": {
+    "message": "Le nom $FILENAME$ contient un caractère de contrôle bidirectionnel",
+    "placeholders": {
+      "FILENAME": {
+        "content": "$1"
+      }
+    }
+  },
+  "reasonScriptExtension": {
+    "message": "Le nom $FILENAME$ utilise une extension de script .$EXTENSION$",
+    "placeholders": {
+      "EXTENSION": {
+        "content": "$2"
+      },
+      "FILENAME": {
+        "content": "$1"
+      }
+    }
+  },
+  "reasonSuspiciousTld": {
+    "message": "L'hôte de téléchargement $HOSTNAME$ utilise un TLD suspect .$TLD$",
+    "placeholders": {
+      "HOSTNAME": {
+        "content": "$7"
+      },
+      "TLD": {
+        "content": "$8"
+      }
+    }
+  },
+  "reasonTrailingSpacesOrDots": {
+    "message": "Le nom $FILENAME$ contient des espaces ou points trompeurs avant son extension",
+    "placeholders": {
+      "FILENAME": {
+        "content": "$1"
+      }
+    }
+  },
+  "reasonTrustedDomain": {
+    "message": "L'hôte source $HOSTNAME$ est approuvé",
+    "placeholders": {
+      "HOSTNAME": {
+        "content": "$7"
+      }
+    }
+  },
+  "save": {
+    "message": "Enregistrer"
+  },
+  "saveError": {
+    "message": "Impossible d'enregistrer les paramètres"
+  },
+  "saveSuccess": {
+    "message": "Paramètres enregistrés"
+  },
+  "scoreLabel": {
+    "message": "score"
+  },
+  "sensitivityHigh": {
+    "message": "Élevée"
+  },
+  "sensitivityLabel": {
+    "message": "Sensibilité de détection"
+  },
+  "sensitivityLow": {
+    "message": "Faible"
+  },
+  "sensitivityMedium": {
+    "message": "Moyenne"
+  },
+  "settingsTitle": {
+    "message": "Paramètres"
+  },
+  "stateAnalyzing": {
+    "message": "Analyse en cours…"
+  },
+  "stateOff": {
+    "message": "La protection est désactivée"
+  },
+  "stateSecure": {
+    "message": "Protection active"
+  },
+  "stateThreat": {
+    "message": "Menace détectée"
+  },
+  "stateThreatBlocked": {
+    "message": "Menace bloquée"
+  },
+  "verdictDangerous": {
+    "message": "Dangereux"
+  },
+  "verdictSafe": {
+    "message": "Sûr"
+  },
+  "verdictSuspicious": {
+    "message": "Suspect"
+  }
+}
