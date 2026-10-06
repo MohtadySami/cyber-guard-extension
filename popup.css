@@ -86,10 +86,19 @@ body {
 
 /* ── Header ── */
 
+/* Three independent cells, in logical order:
+     [status badge] [title / subtitle] [radar]
+   The two text cells share the leftover width (`4fr` / `5fr`) and the radar
+   keeps its natural `auto` width, so the split is identical no matter how long
+   the localised label or title is, and no matter which threat state is shown:
+   the header does not re-flow when the badge text changes. Every track is
+   `minmax(0, …)`, so no cell can spill into its neighbour - the title can never
+   slide under the badge. Track order follows the inline axis, so `dir="rtl"`
+   mirrors the whole header (radar left, badge right) with no extra rules. */
 .header {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 4fr) minmax(0, 5fr) minmax(0, auto);
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
   padding-bottom: 12px;
   border-bottom: 1px solid var(--border);
@@ -100,6 +109,8 @@ body {
   display: flex;
   align-items: center;
   gap: 12px;
+  /* Lets the title cell shrink below its content instead of overflowing into
+     the neighbouring track. */
   min-width: 0;
 }
 
@@ -116,8 +127,12 @@ body {
   font-weight: 700;
   color: var(--text);
   margin: 0;
-  white-space: nowrap;
   letter-spacing: -0.01em;
+  /* Wraps (never overflows) so long localised titles stay fully readable in
+     their own column. `min-width: 0` + `overflow-wrap` are the guarantee that
+     nothing escapes the cell, even at very narrow popup widths. */
+  min-width: 0;
+  overflow-wrap: break-word;
 }
 
 /* ── Smooth 3D Continuous Radar Widget ── */
@@ -217,16 +232,33 @@ body {
   border: 1px solid var(--secure);
   background: var(--secure-dim);
   color: #6ee7b7;
-  white-space: nowrap;
+  /* Never nowrap: a fixed-width popup can only give the badge so much room,
+     so the label wraps inside its own cell rather than being truncated or
+     pushing the title underneath it. It stays fully visible either way.
+     `width: max-content` keeps the pill hugging its label, `max-width: 100%`
+     clamps it to its own track, and `min-width: 0` lets it shrink on very
+     narrow popups instead of overflowing sideways. */
+  width: max-content;
+  max-width: 100%;
+  min-width: 0;
+  text-align: center;
   transition: all 0.3s ease;
 }
 
+/* The status dot is an indicator, never squeezed: the label yields instead. */
 .status-dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
   background: var(--secure);
   box-shadow: 0 0 8px var(--secure);
+  flex-shrink: 0;
+}
+
+/* The label is the only thing allowed to wrap inside the pill. */
+.status-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .status-badge[data-state="analyzing"] {
